@@ -1,0 +1,148 @@
+﻿MAPA DE ARCHIVOS DESDE DASHBOARD
+================================
+
+ARCHIVO PRINCIPAL:
+lib/features/dashboard_screen.dart
+
+IMPORT:
+  lib/core/diseno.dart
+IMPORT:
+  lib/core/services/price_service.dart
+IMPORT:
+  lib/features/caja/entrada_y_salida_screen.dart
+IMPORT:
+  lib/features/caja/cierre_de_caja_screen.dart
+IMPORT:
+  lib/features/caja/historial_de_movimientos_screen.dart
+IMPORT:
+  lib/features/clientes/nuevo_cliente_screen.dart
+IMPORT:
+  lib/features/clientes/clientes_screen.dart
+IMPORT:
+  lib/features/informes/informe_de_caja_screen.dart
+IMPORT:
+  lib/features/informes/informe_de_procesos_screen.dart
+IMPORT:
+  lib/features/pos/ventas_pos_screen.dart
+IMPORT:
+  lib/features/pos/productos_screen.dart
+IMPORT:
+  lib/features/procesos/prestamos_y_abonos_screen.dart
+IMPORT:
+  lib/features/procesos/transacciones_screen.dart
+IMPORT:
+  lib/features/procesos/cafe_a_secar_screen.dart
+IMPORT:
+  lib/features/procesos/bodega__screen.dart
+IMPORT:
+  lib/features/procesos/liquidaciones__screen.dart
+IMPORT:
+  lib/features/configuraciones/complentos_screen.dart
+IMPORT:
+  lib/features/configuraciones/copias_de_seguridad_screen.dart
+IMPORT:
+  lib/features/configuraciones/impresora_screen.dart
+IMPORT:
+  lib/features/configuraciones/diseno_y_estilos_screen.dart
+IMPORT:
+  lib/features/configuraciones/seguridad_screen.dart
+IMPORT:
+  lib/features/configuraciones/factura_screen.dart
+IMPORT:
+  lib/features/inicio/configuracion_inicial_screen.dart
+IMPORT:
+  lib/features/inicio/desbloqueo_screen.dart
+IMPORT:
+  lib/features/inicio/apertura_de_caja_screen.dart
+IMPORT:
+  lib/features/inicio/control_inicio_provider.dart
+PANTALLA:
+  DashboardScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  TransaccionesScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  PrestamosYAbonosScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  CafeASecarScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  LiquidacionesScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  EntradaYSalidaScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  CierreDeCajaScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  HistorialDeMovimientosScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  VentasPosScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  ProductosScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  NuevoClienteScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  ClientesScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  InformeDeCajaScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  InformeDeProcesosScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  DisenoYEstilosScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  CopiasDeSeguridadScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  ComplentosScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  SeguridadScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  FacturaScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  ImpresoraScreen
+PANTALLA:
+  openScreen
+PANTALLA:
+  closeCurrentScreen
+PANTALLA:
+  ConfiguracionInicialScreen
+PANTALLA:
+  DesbloqueoScreen
+PANTALLA:
+  AperturaCajaScreen
