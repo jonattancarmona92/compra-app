@@ -3,10 +3,12 @@
 // coffee-control-2d1d4) para comparar la versión instalada con la
 // publicada y, si procede, descarga e instala el APK con ota_update.
 // Antes de descargar se crea una copia local de la base SQLite.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
+import 'package:http/http.dart' as http;
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
@@ -30,6 +32,11 @@ class InfoActualizacion {
 
   bool hayNueva(int codigoInstalado) =>
       apkUrl.trim().isNotEmpty && versionCodigo > codigoInstalado;
+
+  /// Compara la versión semántica del release vs. la instalada (GitHub).
+  bool hayNuevaVersion(String versionInstalada) =>
+      apkUrl.trim().isNotEmpty &&
+      UpdateService.compararVersiones(versionInstalada, versionNombre) < 0;
 }
 
 class UpdateException implements Exception {
@@ -42,9 +49,29 @@ class UpdateException implements Exception {
 }
 
 class UpdateService {
+  static const String repoGitHub = 'jonattancarmona92/compra-app';
+  static const String githubApiUrl =
+      'https://api.github.com/repos/$repoGitHub/releases/latest';
+  static const String apkAssetNombre = 'Coffe.Control.apk';
+
   static bool _firebaseListo = false;
 
   final OtaUpdate _ota = OtaUpdate();
+
+  /// Compara dos versiones semánticas ("1.2.3" vs "v1.20.0").
+  /// Devuelve < 0 si a < b, 0 si son iguales y > 0 si a > b.
+  static int compararVersiones(String a, String b) {
+    String limpiar(String s) => s.trim().replaceFirst(RegExp('^[vV]'), '');
+    final pa = limpiar(a).split('.');
+    final pb = limpiar(b).split('.');
+    final n = pa.length > pb.length ? pa.length : pb.length;
+    for (var i = 0; i < n; i++) {
+      final x = i < pa.length ? int.tryParse(pa[i]) ?? 0 : 0;
+      final y = i < pb.length ? int.tryParse(pb[i]) ?? 0 : 0;
+      if (x != y) return x.compareTo(y);
+    }
+    return 0;
+  }
 
   /// Inicializa Firebase una sola vez. No lanza; devuelve si quedó listo
   /// para que la pantalla informe (la app funciona offline sin Firebase).
@@ -68,6 +95,61 @@ class UpdateService {
   Future<String> etiquetaVersionInstalada() async {
     final info = await PackageInfo.fromPlatform();
     return 'v${info.version} · Build ${info.buildNumber}';
+  }
+
+  /// Versión (nombre) instalada, p.ej. "1.1.0".
+  Future<String> versionInstaladaNombre() async {
+    final info = await PackageInfo.fromPlatform();
+    return info.version;
+  }
+
+  /// Consulta el último release publicado en GitHub Releases del repo
+  /// jonattancarmona92/compra-app.
+  Future<InfoActualizacion> obtenerDisponibleGitHub() async {
+    try {
+      final resp = await http.get(
+        Uri.parse(githubApiUrl),
+        headers: const {
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'CoffeeControl',
+        },
+      );
+      if (resp.statusCode != 200) {
+        throw UpdateException(
+          'GitHub respondió ${resp.statusCode} '
+          '(¿existe un release publicado en el repositorio?).',
+        );
+      }
+      final json = jsonDecode(resp.body) as Map<String, dynamic>;
+      final tag = (json['tag_name'] as String?) ?? '';
+      final cuerpo = (json['body'] as String?) ?? '';
+      final assets = (json['assets'] as List<dynamic>?) ?? [];
+      String url = '';
+      for (final a in assets) {
+        final asset = a as Map<String, dynamic>;
+        final nombre = (asset['name'] as String?) ?? '';
+        if (nombre.toLowerCase() == apkAssetNombre.toLowerCase()) {
+          url = (asset['browser_download_url'] as String?) ?? '';
+          break;
+        }
+      }
+      if (tag.isEmpty || url.isEmpty) {
+        throw UpdateException(
+          'El release no trae el APK esperado ($apkAssetNombre).',
+        );
+      }
+      return InfoActualizacion(
+        versionCodigo: 0,
+        versionNombre: tag.replaceFirst(RegExp('^[vV]'), ''),
+        apkUrl: url,
+        cambios: cuerpo,
+        esCritica: false,
+      );
+    } on UpdateException {
+      rethrow;
+    } catch (e) {
+      throw UpdateException('No se pudo consultar GitHub: $e');
+    }
   }
 
   /// Consulta y activa Remote Config. Lanza [UpdateException] si el

@@ -20,6 +20,16 @@ import '../caja/caja_provider.dart';
 import 'licencia_provider.dart';
 import 'update_service.dart';
 
+enum _FuenteActualizacion {
+  github('GitHub Releases', Icons.cloud_download_outlined),
+  firebase('Firebase / Remote Config', Icons.cloud_outlined);
+
+  const _FuenteActualizacion(this.nombre, this.icono);
+
+  final String nombre;
+  final IconData icono;
+}
+
 class ActualizacionesScreen extends ConsumerStatefulWidget {
   const ActualizacionesScreen({super.key, required this.onBack});
 
@@ -34,7 +44,9 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
   final UpdateService _servicio = UpdateService();
   final _idController = TextEditingController();
 
+  _FuenteActualizacion _fuente = _FuenteActualizacion.github;
   String _versionInstalada = '';
+  String _versionInstaladaNombre = '';
   int _codigoInstalado = 1;
   InfoActualizacion? _disponible;
   bool _buscando = false;
@@ -61,10 +73,12 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
     try {
       final codigo = await _servicio.codigoVersionInstalado();
       final etiqueta = await _servicio.etiquetaVersionInstalada();
+      final nombre = await _servicio.versionInstaladaNombre();
       if (!mounted) return;
       setState(() {
         _codigoInstalado = codigo;
         _versionInstalada = etiqueta;
+        _versionInstaladaNombre = nombre;
       });
     } catch (_) {
       if (!mounted) return;
@@ -84,13 +98,15 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
       _disponible = null;
     });
     try {
-      final info = await _servicio.obtenerDisponible();
+      final info = _fuente == _FuenteActualizacion.github
+          ? await _servicio.obtenerDisponibleGitHub()
+          : await _servicio.obtenerDisponible();
       if (!mounted) return;
       setState(() {
         _disponible = info;
         _buscando = false;
       });
-      if (!info.hayNueva(_codigoInstalado)) {
+      if (!_hayNueva(info)) {
         Notificaciones.exito(context, 'Ya tiene la última versión');
       }
     } on UpdateException catch (e) {
@@ -107,6 +123,10 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
       });
     }
   }
+
+  bool _hayNueva(InfoActualizacion info) =>
+      info.hayNueva(_codigoInstalado) ||
+      info.hayNuevaVersion(_versionInstaladaNombre);
 
   // =========================================================================
   // FLUJO DE ACTUALIZACIÓN
@@ -366,6 +386,8 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
         children: [
           _buildTarjetaVersion(),
           const SizedBox(height: AppEspaciado.m),
+          _buildSelectorFuente(),
+          const SizedBox(height: AppEspaciado.m),
           _buildBotonBuscar(),
           if (_buscando) ...[
             const SizedBox(height: AppEspaciado.m),
@@ -451,6 +473,33 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
     );
   }
 
+  Widget _buildSelectorFuente() {
+    return DropdownButtonFormField<_FuenteActualizacion>(
+      initialValue: _fuente,
+      decoration: const InputDecoration(
+        labelText: 'Fuente de actualización',
+        prefixIcon: Icon(Icons.travel_explore),
+        border: OutlineInputBorder(),
+      ),
+      items: _FuenteActualizacion.values
+          .map(
+            (f) => DropdownMenuItem(
+              value: f,
+              child: Text(f.nombre),
+            ),
+          )
+          .toList(),
+      onChanged: (v) {
+        if (v == null || _descargando) return;
+        setState(() {
+          _fuente = v;
+          _disponible = null;
+          _errorBusqueda = null;
+        });
+      },
+    );
+  }
+
   Widget _buildBotonBuscar() {
     return SizedBox(
       width: double.infinity,
@@ -466,7 +515,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
     InfoActualizacion info,
     CajaEstado estadoCaja,
   ) {
-    final hayNueva = info.hayNueva(_codigoInstalado);
+    final hayNueva = _hayNueva(info);
     final etiquetaVersion =
         info.versionNombre.trim().isEmpty ? 'v${info.versionCodigo}' : info.versionNombre.trim();
 
