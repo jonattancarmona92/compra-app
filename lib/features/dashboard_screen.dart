@@ -919,7 +919,7 @@ class _DashboardMenu extends StatelessWidget {
         crossAxisCount: 2,
         crossAxisSpacing: AppEspaciado.l,
         mainAxisSpacing: AppEspaciado.l,
-        childAspectRatio: 0.95,
+        childAspectRatio: 1.1,
       ),
       itemCount: menuItems.length,
       itemBuilder: (context, index) {
@@ -979,17 +979,13 @@ class _MenuCard extends StatelessWidget {
                   color: menu.menuCardIconColor,
                   size: menu.menuCardIconSize,
                 ),
-                const SizedBox(height: 4),
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: menu.menuCardTitleStyle,
-                    ),
-                  ),
+                const SizedBox(height: AppEspaciado.xs),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: menu.menuCardTitleStyle,
                 ),
               ],
             ),
@@ -1080,7 +1076,7 @@ class _SubmenuView extends StatelessWidget {
         crossAxisCount: 2,
         crossAxisSpacing: AppEspaciado.l,
         mainAxisSpacing: AppEspaciado.l,
-        childAspectRatio: 0.95,
+        childAspectRatio: 1.1,
       ),
       itemCount: opciones.length,
       itemBuilder: (context, index) {
