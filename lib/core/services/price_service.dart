@@ -7,9 +7,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class PriceData {
   final String price;
+  final String? variantionPesos;
+  final String? variantionPorcentaje;
+  final String? fechaCotizacion;
   final DateTime lastUpdated;
 
-  PriceData({required this.price, required this.lastUpdated});
+  PriceData({
+    required this.price,
+    this.variantionPesos,
+    this.variantionPorcentaje,
+    this.fechaCotizacion,
+    required this.lastUpdated,
+  });
 }
 
 /// Una cotización registrada en un día concreto del historial de precios.
@@ -27,6 +36,9 @@ class PriceService {
   static const String _priceKey = 'last_coffee_price';
   static const String _dateKey = 'last_coffee_price_date';
   static const String _historyKey = 'coffee_price_history';
+  static const String _variationPesosKey = 'last_coffee_variation_pesos';
+  static const String _variationPorKey = 'last_coffee_variation_por';
+  static const String _quoteDateKey = 'last_coffee_quote_date';
 
   Future<PriceData?> getPrice() async {
     try {
@@ -44,68 +56,53 @@ class PriceService {
     if (response.statusCode == 200) {
       final document = html.parse(response.body);
 
-      final List<dom.Element> elements = document.querySelectorAll(
-        '.basic-card',
-      );
-
-      for (final element in elements) {
-        final text = element.text.toUpperCase();
-
-        if (text.contains('PRECIO INTERNO BASE') &&
-            text.contains('PERGAMINO')) {
-          final priceMatch = RegExp(
-            r'\$?\s*([0-9.,]+)',
-          ).firstMatch(element.text);
-
-          if (priceMatch != null) {
-            final price = priceMatch.group(1)?.trim() ?? '';
-
-            if (price.isNotEmpty) {
-              return PriceData(price: price, lastUpdated: DateTime.now());
-            }
-          }
+      // Busca la tarjeta del "PRECIO INTERNO BASE - CAFÉ PERGAMINO SECO",
+      // que contiene el precio, la variación absoluta en pesos, la variación
+      // porcentual y la fecha de la cotización.
+      dom.Element? tarjeta;
+      for (final element in document.querySelectorAll('.cardI')) {
+        final texto = element.text.toUpperCase();
+        if (texto.contains('PRECIO INTERNO BASE') &&
+            texto.contains('PERGAMINO')) {
+          tarjeta = element;
+          break;
         }
       }
 
-      final List<dom.Element> priceElements = document.querySelectorAll(
-        'span.value',
-      );
+      if (tarjeta != null) {
+        final precio = _extraerCantidad(
+          tarjeta.querySelector('.price')?.text,
+        );
+        final variacionPesos = tarjeta.querySelector('.varAbs')?.text.trim();
+        final variacionPorcentaje =
+            tarjeta.querySelector('.varPor')?.text.trim();
+        final fechaCotizacion =
+            tarjeta.querySelector('.date')?.text.trim();
 
-      for (final element in priceElements) {
-        final parent = element.parent;
-
-        if (parent != null &&
-            parent.text.toUpperCase().contains('PRECIO INTERNO BASE')) {
-          final price = element.text.replaceAll(RegExp(r'[^\d.,]'), '').trim();
-
-          if (price.isNotEmpty) {
-            return PriceData(price: price, lastUpdated: DateTime.now());
-          }
-        }
-      }
-
-      final allText = document.body?.text ?? '';
-
-      if (allText.contains('PRECIO INTERNO BASE')) {
-        final priceMatch = RegExp(
-          r'PRECIO INTERNO BASE[^0-9]*([0-9.,]+)',
-        ).firstMatch(allText);
-
-        if (priceMatch != null) {
-          final price = priceMatch.group(1)?.trim() ?? '';
-
-          if (price.isNotEmpty) {
-            return PriceData(price: price, lastUpdated: DateTime.now());
-          }
+        if (precio != null && precio.isNotEmpty) {
+          return PriceData(
+            price: precio,
+            variantionPesos: variacionPesos,
+            variantionPorcentaje: variacionPorcentaje,
+            fechaCotizacion: fechaCotizacion,
+            lastUpdated: DateTime.now(),
+          );
         }
       }
 
       throw Exception(
-        'No se pudo encontrar el elemento del precio en la página.',
+        'No se pudo encontrar el precio del café pergamino seco en la página.',
       );
     } else {
       throw Exception('Fallo al cargar la página: ${response.statusCode}');
     }
+  }
+
+  /// Extrae el número de un texto de precio ("$ 2.043.000,00" -> "2.043.000,00").
+  String? _extraerCantidad(String? texto) {
+    if (texto == null) return null;
+    final match = RegExp(r'[\d.,]+').firstMatch(texto);
+    return match?.group(0)?.trim();
   }
 
   Future<void> _savePriceLocally(PriceData data) async {
@@ -115,9 +112,22 @@ class PriceService {
 
     await prefs.setString(_dateKey, data.lastUpdated.toIso8601String());
 
-    // Registra esta cotización en el historial diario (una entrada por día).
+    if (data.variantionPesos != null) {
+      await prefs.setString(_variationPesosKey, data.variantionPesos!);
+    }
+    if (data.variantionPorcentaje != null) {
+      await prefs.setString(_variationPorKey, data.variantionPorcentaje!);
+    }
+    if (data.fechaCotizacion != null) {
+      await prefs.setString(_quoteDateKey, data.fechaCotizacion!);
+    }
+
+    // Registra esta cotización en el historial diario (una entrada por día)
+    // usando la fecha de cotización que publica la página cuando está
+    // disponible; si no, se usa la fecha de la consulta.
     final historial = await _loadHistoryFromLocal();
-    final dia = _normalizarDia(data.lastUpdated);
+    final dia = _parsearFechaCotizacion(data.fechaCotizacion) ??
+        _normalizarDia(data.lastUpdated);
     final historialActualizado = {
       for (final entry in historial) entry.fecha.toIso8601String(): entry.price,
       dia.toIso8601String(): data.price,
@@ -128,6 +138,15 @@ class PriceService {
           .map((e) => '${e.key}|${e.value}')
           .join('\n'),
     );
+  }
+
+  /// Convierte "08/09/2026" a una fecha normalizada a medianoche.
+  DateTime? _parsearFechaCotizacion(String? texto) {
+    if (texto == null) return null;
+    final match = RegExp(r'(\d{1,2})/(\d{1,2})/(\d{4})').firstMatch(texto.trim());
+    if (match == null) return null;
+    return DateTime(int.parse(match.group(3)!),
+        int.parse(match.group(2)!), int.parse(match.group(1)!));
   }
 
   Future<List<PrecioHistorico>> _loadHistoryFromLocal() async {
@@ -169,10 +188,20 @@ class PriceService {
       final lastUpdated = DateTime.tryParse(dateString);
 
       if (lastUpdated != null) {
-        return PriceData(price: price, lastUpdated: lastUpdated);
+        return PriceData(
+          price: price,
+          variantionPesos: prefs.getString(_variationPesosKey),
+          variantionPorcentaje: prefs.getString(_variationPorKey),
+          fechaCotizacion: prefs.getString(_quoteDateKey),
+          lastUpdated: lastUpdated,
+        );
       }
     }
 
     return null;
   }
+
+  /// Persiste un [PriceData] (último precio + variación + historial diario).
+  /// Exposición pública para pruebas y para re-guardar datos cacheados.
+  Future<void> guardarDatos(PriceData data) => _savePriceLocally(data);
 }

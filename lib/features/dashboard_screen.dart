@@ -523,12 +523,29 @@ class _CoffeePriceBanner extends StatelessWidget {
     required this.onRefresh,
   });
 
-  /// §3.2: alerta visual de obsolescencia si supera 24 horas sin
-  /// actualización.
-  bool _esObsoleto(DateTime? ultimaActualizacion) {
-    if (ultimaActualizacion == null) return false;
-    final diferencia = DateTime.now().difference(ultimaActualizacion);
-    return diferencia.inHours >= 24;
+  /// §3.2: alerta visual de obsolescencia. Usa la fecha de cotización
+  /// publicada por la página (si está) y, si no, la última consulta.
+  bool _esObsoleto(PriceData? data) {
+    final now = DateTime.now();
+    final hoy = DateTime(now.year, now.month, now.day);
+    if (data == null) return false;
+
+    final fechaCot = data.fechaCotizacion;
+    if (fechaCot != null && fechaCot.trim().isNotEmpty) {
+      final match = RegExp(r'(\d{1,2})/(\d{1,2})/(\d{4})')
+          .firstMatch(fechaCot.trim());
+      if (match != null) {
+        final dia = DateTime(
+          int.parse(match.group(3)!),
+          int.parse(match.group(2)!),
+          int.parse(match.group(1)!),
+        );
+        // Se considera obsoleto solo si la cotización es de un día anterior
+        // al actual (las publicaciones de fin de semana conservan el viernes).
+        return dia.isBefore(hoy);
+      }
+    }
+    return now.difference(data.lastUpdated).inHours >= 24;
   }
 
   String _formatearFecha(DateTime dt) {
@@ -537,12 +554,23 @@ class _CoffeePriceBanner extends StatelessWidget {
         '${dos(dt.hour)}:${dos(dt.minute)}';
   }
 
-  /// Convierte la cadena de precio ("1.234.500" o "1234500") a número.
-  double? _precioANumero(String? price) {
+  /// Convierte un precio o variación con formato colombiano al número:
+/// "2.043.000,00" -> 2043000.0, "-$ 37.000,00" -> -37000.0.
+double? _precioANumero(String? price) {
     if (price == null || price.trim().isEmpty) return null;
-    final limpio = price.replaceAll(RegExp(r'[^\d]'), '');
-    if (limpio.isEmpty) return null;
-    return double.tryParse(limpio);
+    var s = price.trim().replaceAll(r'$', '').replaceAll(' ', '');
+    var signo = 1.0;
+    if (s.startsWith('-')) {
+      signo = -1.0;
+      s = s.substring(1);
+    } else if (s.startsWith('+')) {
+      s = s.substring(1);
+    }
+    // Quita los puntos de miles y convierte la coma decimal en punto.
+    final limpio = s.replaceAll('.', '').replaceAll(',', '.');
+    final num = double.tryParse(limpio);
+    if (num == null) return null;
+    return num * signo;
   }
 
   String _formatearValor(double valor) {
@@ -580,6 +608,16 @@ class _CoffeePriceBanner extends StatelessWidget {
     return diff > 0 ? 1 : -1;
   }
 
+  /// Deriva la tendencia de la variación publicada por la página según su
+  /// signo. Devuelve null si no hay variación ("-$ 0" -> estable).
+  int? _tendenciaDesdeVariacion(String variacionPesos) {
+    if (variacionPesos.isEmpty) return null;
+    final cae = variacionPesos.startsWith('-');
+    final monto = _precioANumero(variacionPesos);
+    if (monto == null || monto == 0) return 0;
+    return cae ? -1 : 1;
+  }
+
   @override
   Widget build(BuildContext context) {
     final banner = Theme.of(context).extension<CoffeeCustomTheme>()!;
@@ -608,7 +646,7 @@ class _CoffeePriceBanner extends StatelessWidget {
           }
 
           final priceData = snapshot.data;
-          final esObsoleto = _esObsoleto(priceData?.lastUpdated);
+          final esObsoleto = _esObsoleto(priceData);
           final actual = _precioANumero(priceData?.price);
 
           return FutureBuilder<List<PrecioHistorico>>(
@@ -629,8 +667,20 @@ class _CoffeePriceBanner extends StatelessWidget {
 
               final precioAyer = _buscarDia(historial, ayer);
               final precioAnteayer = _buscarDia(historial, anteayer);
-              final anterior = _precioANumero(precioAyer?.price);
-              final tendencia = _calcularTendencia(actual, anterior);
+
+              // La variación viene directamente de la página (p.ej.
+              // "-$ 37.000,00"). De ella se deduce la flecha de tendencia;
+              // si no hay variación publicada, se compara con el historial.
+              final variacionPesos = priceData?.variantionPesos?.trim() ?? '';
+              final variacionPor = priceData?.variantionPorcentaje?.trim() ?? '';
+              final tendencia = _tendenciaDesdeVariacion(variacionPesos) ??
+                  _calcularTendencia(actual, _precioANumero(precioAyer?.price));
+
+              final etiquetaFecha = (priceData?.fechaCotizacion ??
+                      '') // Ej: "08/09/2026"
+                  .isNotEmpty
+                  ? 'Cotización: ${priceData!.fechaCotizacion}'
+                  : 'Actualizado: ${_formatearFecha(priceData?.lastUpdated ?? DateTime.now())}';
 
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -687,7 +737,16 @@ class _CoffeePriceBanner extends StatelessWidget {
                                     : banner.priceBannerPriceStyle.color,
                               ),
                             ),
-                            if (tendencia != null) ...[
+                            if (priceData != null &&
+                                variacionPesos.isNotEmpty) ...[
+                              const SizedBox(width: AppEspaciado.m),
+                              _buildVariacion(
+                                banner,
+                                variacionPesos,
+                                variacionPor,
+                                tendencia,
+                              ),
+                            ] else if (tendencia != null) ...[
                               const SizedBox(width: AppEspaciado.m),
                               _buildFlechaTendencia(banner, tendencia),
                             ],
@@ -697,9 +756,7 @@ class _CoffeePriceBanner extends StatelessWidget {
                         const SizedBox(height: AppEspaciado.m),
 
                         Text(
-                          priceData != null
-                              ? 'Actualizado: ${_formatearFecha(priceData.lastUpdated)}'
-                              : '--',
+                          priceData != null ? etiquetaFecha : '--',
                           style: banner.priceBannerUpdateStyle,
                         ),
 
@@ -771,6 +828,64 @@ class _CoffeePriceBanner extends StatelessWidget {
         Text(
           estable ? 'estable' : (sube ? 'sube' : 'baja'),
           style: TextStyle(color: color, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  /// Muestra la variación con signo normalizado según tendencia:
+  /// "-$ 37.000" si cae, "=$ 0" si permanece estable, "+$ 37.000" si sube,
+  /// más el porcentaje si la página lo publica.
+  Widget _buildVariacion(
+    CoffeeCustomTheme banner,
+    String variacionPesos,
+    String variacionPor,
+    int? tendencia,
+  ) {
+    final color = tendencia == null
+        ? banner.precioTendenciaEstableColor
+        : tendencia == 0
+            ? banner.precioTendenciaEstableColor
+            : tendencia < 0
+                ? banner.precioTendenciaBajaColor
+                : banner.precioTendenciaSubeColor;
+    final cae = tendencia != null && tendencia < 0;
+    final estable = tendencia == 0;
+    // Signo normalizado pedido por el negocio: - cae, = estable, + sube.
+    final signo = tendencia == null
+        ? '='
+        : (estable ? '=' : (cae ? '-' : '+'));
+    final monto = _precioANumero(variacionPesos);
+    final montoTexto =
+        monto == null ? '--' : _formatearValor(monto.abs());
+    final sufijo = variacionPor.isEmpty ? '' : ' ($variacionPor)';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          tendencia == 0
+              ? Icons.trending_flat
+              : (cae ? Icons.arrow_downward : Icons.arrow_upward),
+          color: color,
+          size: 20,
+        ),
+        const SizedBox(width: AppEspaciado.xs),
+        Flex(
+          direction: Axis.horizontal,
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                '$signo$montoTexto$sufijo',
+                style: banner.priceBannerUpdateStyle.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
