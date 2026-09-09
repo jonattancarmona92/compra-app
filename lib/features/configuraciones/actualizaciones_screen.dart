@@ -16,7 +16,9 @@ import 'package:path/path.dart' as p;
 
 import '../../core/diseno.dart';
 import '../../core/seguridad/licencia_pin.dart';
+import '../../core/widgets/pin_entry_widget.dart';
 import '../caja/caja_provider.dart';
+import '../inicio/control_inicio_provider.dart';
 import 'licencia_provider.dart';
 import 'update_service.dart';
 
@@ -41,6 +43,8 @@ class ActualizacionesScreen extends ConsumerStatefulWidget {
 }
 
 class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
+  static const String _operadorActual = 'operador_demo';
+
   final UpdateService _servicio = UpdateService();
   final _idController = TextEditingController();
 
@@ -160,8 +164,8 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
     await _descargarEInstalar(info);
   }
 
-  Future<void> _mostrarBloqueoCaja() {
-    return showDialog<void>(
+  Future<void> _mostrarBloqueoCaja() async {
+    final cerrar = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
@@ -170,16 +174,80 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
         title: const Text('Turno de caja abierto'),
         content: const Text(
           'No es posible actualizar la aplicación mientras haya un turno '
-          'de caja abierto. Cierre la caja primero e intente nuevamente.',
+          'de caja abierto. Puede cerrar la caja ahora (confirmará con su '
+          'PIN) y continuar con la actualización, o cerrarla más tarde '
+          'desde Configuración > Cierres.',
         ),
         actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Más tarde'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Entendido'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Cerrar caja ahora'),
           ),
         ],
       ),
     );
+    if (cerrar != true || !mounted) return;
+    await _cerrarCajaParaActualizar();
+  }
+
+  /// Cierra la caja (misma convención del módulo Cierres §3.3.4: confirmación
+  /// + PIN obligatorio) y, si se logra, reanuda el flujo de actualización.
+  Future<void> _cerrarCajaParaActualizar() async {
+    final estado = ref.read(cajaProvider);
+    final saldoTeorico = estado.saldoActual;
+
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppPaletaOficial.blanco,
+        title: const Text('Confirmar cierre de Caja'),
+        content: Text(
+          'Saldo teórico final: '
+          '${CurrencyFormatter.formatValue(saldoTeorico)}\n\n'
+          'Cerrar la caja permite continuar con la actualización. '
+          'Esta acción requiere PIN de seguridad.',
+          style: const TextStyle(color: AppPaletaOficial.negro),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Cerrar Caja'),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true || !mounted) return;
+
+    final pinValido = await showPinValidationDialog(
+      context,
+      onValidate: (pin) =>
+          ref.read(controlInicioProvider.notifier).validarPinOperativo(pin),
+    );
+    if (!pinValido || !mounted) return;
+
+    try {
+      await ref
+          .read(cajaProvider.notifier)
+          .cerrarCaja(operador: _operadorActual);
+      if (!mounted) return;
+      Notificaciones.exito(context, 'Caja cerrada. Ahora puede actualizar.');
+      // La caja ya está cerrada: reanuda el flujo de actualización.
+      _iniciarActualizacion();
+    } on CajaNoAbiertaException {
+      if (!mounted) return;
+      Notificaciones.error(context, 'La caja ya se encontraba cerrada.');
+    } catch (_) {
+      if (!mounted) return;
+      Notificaciones.error(context, 'No fue posible cerrar la caja.');
+    }
   }
 
   Future<String?> _pedirDispositivoId() {
