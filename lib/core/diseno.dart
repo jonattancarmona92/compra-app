@@ -305,6 +305,10 @@ class CoffeeCustomTheme extends ThemeExtension<CoffeeCustomTheme> {
   final Color cajaBannerBackgroundColor;
   final TextStyle cajaBannerTextStyle;
   final Color alertaObsolescenciaColor;
+  final Color precioTendenciaSubeColor;
+  final Color precioTendenciaBajaColor;
+  final Color precioTendenciaEstableColor;
+  final TextStyle precioTendenciaEtiquetaStyle;
 
   const CoffeeCustomTheme({
     this.dashboardPagePadding = const EdgeInsets.all(AppEspaciado.l),
@@ -340,6 +344,13 @@ class CoffeeCustomTheme extends ThemeExtension<CoffeeCustomTheme> {
       fontSize: AppEscalaTipografica.subtitulo,
     ),
     this.alertaObsolescenciaColor = AppPaletaOficial.amarillo,
+    this.precioTendenciaSubeColor = AppPaletaOficial.verde,
+    this.precioTendenciaBajaColor = AppPaletaOficial.rojo,
+    this.precioTendenciaEstableColor = AppPaletaOficial.amarillo,
+    this.precioTendenciaEtiquetaStyle = const TextStyle(
+      color: Colors.white70,
+      fontSize: AppEscalaTipografica.notas,
+    ),
   });
 
   @override
@@ -361,6 +372,10 @@ class CoffeeCustomTheme extends ThemeExtension<CoffeeCustomTheme> {
     Color? cajaBannerBackgroundColor,
     TextStyle? cajaBannerTextStyle,
     Color? alertaObsolescenciaColor,
+    Color? precioTendenciaSubeColor,
+    Color? precioTendenciaBajaColor,
+    Color? precioTendenciaEstableColor,
+    TextStyle? precioTendenciaEtiquetaStyle,
   }) {
     return CoffeeCustomTheme(
       dashboardPagePadding: dashboardPagePadding ?? this.dashboardPagePadding,
@@ -390,6 +405,14 @@ class CoffeeCustomTheme extends ThemeExtension<CoffeeCustomTheme> {
       cajaBannerTextStyle: cajaBannerTextStyle ?? this.cajaBannerTextStyle,
       alertaObsolescenciaColor:
           alertaObsolescenciaColor ?? this.alertaObsolescenciaColor,
+      precioTendenciaSubeColor:
+          precioTendenciaSubeColor ?? this.precioTendenciaSubeColor,
+      precioTendenciaBajaColor:
+          precioTendenciaBajaColor ?? this.precioTendenciaBajaColor,
+      precioTendenciaEstableColor:
+          precioTendenciaEstableColor ?? this.precioTendenciaEstableColor,
+      precioTendenciaEtiquetaStyle:
+          precioTendenciaEtiquetaStyle ?? this.precioTendenciaEtiquetaStyle,
     );
   }
 
@@ -488,6 +511,34 @@ class CoffeeCustomTheme extends ThemeExtension<CoffeeCustomTheme> {
             t,
           ) ??
           alertaObsolescenciaColor,
+      precioTendenciaSubeColor:
+          Color.lerp(
+            precioTendenciaSubeColor,
+            other.precioTendenciaSubeColor,
+            t,
+          ) ??
+          precioTendenciaSubeColor,
+      precioTendenciaBajaColor:
+          Color.lerp(
+            precioTendenciaBajaColor,
+            other.precioTendenciaBajaColor,
+            t,
+          ) ??
+          precioTendenciaBajaColor,
+      precioTendenciaEstableColor:
+          Color.lerp(
+            precioTendenciaEstableColor,
+            other.precioTendenciaEstableColor,
+            t,
+          ) ??
+          precioTendenciaEstableColor,
+      precioTendenciaEtiquetaStyle:
+          TextStyle.lerp(
+            precioTendenciaEtiquetaStyle,
+            other.precioTendenciaEtiquetaStyle,
+            t,
+          ) ??
+          precioTendenciaEtiquetaStyle,
     );
   }
 }

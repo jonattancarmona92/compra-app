@@ -73,6 +73,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   late final PriceService _priceService;
   late Future<PriceData?> _priceFuture;
+  late Future<List<PrecioHistorico>> _historyFuture;
 
   String? _currentMenu;
   final String _appTitle = 'Coffee Control';
@@ -84,6 +85,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     super.initState();
     _priceService = PriceService();
     _priceFuture = _priceService.getPrice();
+    _historyFuture = _priceService.obtenerHistorial();
   }
 
   // ==========================================================================
@@ -93,6 +95,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void _refreshPrice() {
     setState(() {
       _priceFuture = _priceService.getPrice();
+      _historyFuture = _priceService.obtenerHistorial();
     });
   }
 
@@ -328,6 +331,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
                     _CoffeePriceBanner(
                       priceFuture: _priceFuture,
+                      historyFuture: _historyFuture,
                       onRefresh: _refreshPrice,
                     ),
 
@@ -510,10 +514,12 @@ class _PeriodoOperativoOverlayState
 
 class _CoffeePriceBanner extends StatelessWidget {
   final Future<PriceData?> priceFuture;
+  final Future<List<PrecioHistorico>> historyFuture;
   final VoidCallback onRefresh;
 
   const _CoffeePriceBanner({
     required this.priceFuture,
+    required this.historyFuture,
     required this.onRefresh,
   });
 
@@ -529,6 +535,49 @@ class _CoffeePriceBanner extends StatelessWidget {
     String dos(int v) => v.toString().padLeft(2, '0');
     return '${dos(dt.day)}/${dos(dt.month)}/${dt.year} '
         '${dos(dt.hour)}:${dos(dt.minute)}';
+  }
+
+  /// Convierte la cadena de precio ("1.234.500" o "1234500") a número.
+  double? _precioANumero(String? price) {
+    if (price == null || price.trim().isEmpty) return null;
+    final limpio = price.replaceAll(RegExp(r'[^\d]'), '');
+    if (limpio.isEmpty) return null;
+    return double.tryParse(limpio);
+  }
+
+  String _formatearValor(double valor) {
+    final sinDecimales = valor.round().toString();
+    final buffer = StringBuffer();
+    final separador = '.';
+    for (var i = 0; i < sinDecimales.length; i++) {
+      final desdeFinal = sinDecimales.length - i;
+      if (i > 0 && desdeFinal % 3 == 0) buffer.write(separador);
+      buffer.write(sinDecimales[i]);
+    }
+    return '\$ $buffer';
+  }
+
+  /// Busca el [PrecioHistorico] del día indicado (normalizado a medianoche).
+  PrecioHistorico? _buscarDia(List<PrecioHistorico> historial, DateTime dia) {
+    final objetivo = DateTime(dia.year, dia.month, dia.day);
+    for (final entry in historial) {
+      if (entry.fecha.year == objetivo.year &&
+          entry.fecha.month == objetivo.month &&
+          entry.fecha.day == objetivo.day) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  /// Determina la tendencia comparando el precio actual con el de ayer.
+  /// Devuelve -1 (baja), 0 (estable) o 1 (sube); null si no hay base.
+  int? _calcularTendencia(double? actual, double? anterior) {
+    if (actual == null || anterior == null) return null;
+    final diff = actual - anterior;
+    final umbral = anterior.abs() * 0.0001; // tolerancia a redondeo
+    if (diff.abs() <= umbral) return 0;
+    return diff > 0 ? 1 : -1;
   }
 
   @override
@@ -560,99 +609,170 @@ class _CoffeePriceBanner extends StatelessWidget {
 
           final priceData = snapshot.data;
           final esObsoleto = _esObsoleto(priceData?.lastUpdated);
+          final actual = _precioANumero(priceData?.price);
 
-          return Row(
-            children: [
-              Icon(
-                AppIconos.granoDeCafe,
-                color: banner.priceBannerIconColor,
-                size: 48,
-              ),
+          return FutureBuilder<List<PrecioHistorico>>(
+            future: historyFuture,
+            builder: (context, histSnapshot) {
+              final historial = histSnapshot.data ?? const <PrecioHistorico>[];
+              final hoy = DateTime.now();
+              final ayer = DateTime(
+                hoy.year,
+                hoy.month,
+                hoy.day,
+              ).subtract(const Duration(days: 1));
+              final anteayer = DateTime(
+                hoy.year,
+                hoy.month,
+                hoy.day,
+              ).subtract(const Duration(days: 2));
 
-              const SizedBox(width: AppEspaciado.xl),
+              final precioAyer = _buscarDia(historial, ayer);
+              final precioAnteayer = _buscarDia(historial, anteayer);
+              final anterior = _precioANumero(precioAyer?.price);
+              final tendencia = _calcularTendencia(actual, anterior);
 
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    AppIconos.granoDeCafe,
+                    color: banner.priceBannerIconColor,
+                    size: 48,
+                  ),
+
+                  const SizedBox(width: AppEspaciado.xl),
+
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Flexible(
-                          child: Text(
-                            'PRECIO CAFÉ PERGAMINO SECO',
-                            style: banner.priceBannerTitleStyle,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'PRECIO CAFÉ PERGAMINO SECO',
+                                style: banner.priceBannerTitleStyle,
+                              ),
+                            ),
+                            if (esObsoleto) ...[
+                              const SizedBox(width: AppEspaciado.s),
+                              Tooltip(
+                                message:
+                                    'Precio desactualizado hace más de 24 horas',
+                                child: Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: banner.alertaObsolescenciaColor,
+                                  size: 18,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                        if (esObsoleto) ...[
-                          const SizedBox(width: AppEspaciado.s),
-                          Tooltip(
-                            message:
-                                'Precio desactualizado hace más de 24 horas',
-                            child: Icon(
-                              Icons.warning_amber_rounded,
-                              color: banner.alertaObsolescenciaColor,
-                              size: 18,
+
+                        const SizedBox(height: AppEspaciado.m),
+
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              priceData != null
+                                  ? _formatearValor(
+                                      _precioANumero(priceData.price) ?? 0,
+                                    )
+                                  : '--',
+                              style: banner.priceBannerPriceStyle.copyWith(
+                                color: esObsoleto
+                                    ? banner.alertaObsolescenciaColor
+                                    : banner.priceBannerPriceStyle.color,
+                              ),
+                            ),
+                            if (tendencia != null) ...[
+                              const SizedBox(width: AppEspaciado.m),
+                              _buildFlechaTendencia(banner, tendencia),
+                            ],
+                          ],
+                        ),
+
+                        const SizedBox(height: AppEspaciado.m),
+
+                        Text(
+                          priceData != null
+                              ? 'Actualizado: ${_formatearFecha(priceData.lastUpdated)}'
+                              : '--',
+                          style: banner.priceBannerUpdateStyle,
+                        ),
+
+                        const SizedBox(height: AppEspaciado.m),
+
+                        Text(
+                          'Ayer: ${precioAyer != null ? _formatearValor(_precioANumero(precioAyer.price) ?? 0) : '--'}'
+                          ' · Anteayer: ${precioAnteayer != null ? _formatearValor(_precioANumero(precioAnteayer.price) ?? 0) : '--'}',
+                          style: banner.precioTendenciaEtiquetaStyle,
+                        ),
+
+                        const SizedBox(height: AppEspaciado.m),
+
+                        SizedBox(
+                          height: 40,
+                          child: ElevatedButton.icon(
+                            onPressed: onRefresh,
+                            icon: const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Icon(Icons.refresh, size: 18),
+                            ),
+                            label: const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('Actualizar'),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.secondary,
+                              foregroundColor: Theme.of(
+                                context,
+                              ).colorScheme.onSecondary,
+                              minimumSize: const Size(80, 40),
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
                             ),
                           ),
-                        ],
+                        ),
                       ],
                     ),
-
-                    const SizedBox(height: AppEspaciado.m),
-
-                    Text(
-                      priceData != null
-                          ? '\$ ${priceData.price.replaceAll(RegExp(r'[.,]\d+$'), '')}'
-                          : '--',
-                      style: banner.priceBannerPriceStyle.copyWith(
-                        color: esObsoleto
-                            ? banner.alertaObsolescenciaColor
-                            : banner.priceBannerPriceStyle.color,
-                      ),
-                    ),
-
-                    const SizedBox(height: AppEspaciado.m),
-
-                    Text(
-                      priceData != null
-                          ? 'Actualizado: ${_formatearFecha(priceData.lastUpdated)}'
-                          : '--',
-                      style: banner.priceBannerUpdateStyle,
-                    ),
-
-                    const SizedBox(height: AppEspaciado.m),
-
-                    SizedBox(
-                      height: 40,
-                      child: ElevatedButton.icon(
-                        onPressed: onRefresh,
-                        icon: const FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Icon(Icons.refresh, size: 18),
-                        ),
-                        label: const FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text('Actualizar'),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.secondary,
-                          foregroundColor: Theme.of(
-                            context,
-                          ).colorScheme.onSecondary,
-                          minimumSize: const Size(80, 40),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
+    );
+  }
+
+  Widget _buildFlechaTendencia(CoffeeCustomTheme banner, int tendencia) {
+    final sube = tendencia > 0;
+    final estable = tendencia == 0;
+    final color = estable
+        ? banner.precioTendenciaEstableColor
+        : sube
+            ? banner.precioTendenciaSubeColor
+            : banner.precioTendenciaBajaColor;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          estable
+              ? Icons.trending_flat
+              : (sube ? Icons.trending_up : Icons.trending_down),
+          color: color,
+          size: 28,
+        ),
+        const SizedBox(width: AppEspaciado.xs),
+        Text(
+          estable ? 'estable' : (sube ? 'sube' : 'baja'),
+          style: TextStyle(color: color, fontWeight: FontWeight.bold),
+        ),
+      ],
     );
   }
 }

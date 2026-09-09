@@ -12,12 +12,21 @@ class PriceData {
   PriceData({required this.price, required this.lastUpdated});
 }
 
+/// Una cotización registrada en un día concreto del historial de precios.
+class PrecioHistorico {
+  final DateTime fecha; // normalizada a medianoche (solo día)
+  final String price;
+
+  PrecioHistorico({required this.fecha, required this.price});
+}
+
 class PriceService {
   static const String _url =
       'https://www.larepublica.co/indicadores-economicos/commodities/cafe';
 
   static const String _priceKey = 'last_coffee_price';
   static const String _dateKey = 'last_coffee_price_date';
+  static const String _historyKey = 'coffee_price_history';
 
   Future<PriceData?> getPrice() async {
     try {
@@ -105,6 +114,49 @@ class PriceService {
     await prefs.setString(_priceKey, data.price);
 
     await prefs.setString(_dateKey, data.lastUpdated.toIso8601String());
+
+    // Registra esta cotización en el historial diario (una entrada por día).
+    final historial = await _loadHistoryFromLocal();
+    final dia = _normalizarDia(data.lastUpdated);
+    final historialActualizado = {
+      for (final entry in historial) entry.fecha.toIso8601String(): entry.price,
+      dia.toIso8601String(): data.price,
+    };
+    await prefs.setString(
+      _historyKey,
+      historialActualizado.entries
+          .map((e) => '${e.key}|${e.value}')
+          .join('\n'),
+    );
+  }
+
+  Future<List<PrecioHistorico>> _loadHistoryFromLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_historyKey);
+    if (raw == null || raw.isEmpty) return [];
+
+    final resultado = <PrecioHistorico>[];
+    for (final line in raw.split('\n')) {
+      final parts = line.split('|');
+      if (parts.length != 2) continue;
+      final fecha = DateTime.tryParse(parts[0]);
+      if (fecha == null || parts[1].isEmpty) continue;
+      resultado.add(
+        PrecioHistorico(fecha: _normalizarDia(fecha), price: parts[1]),
+      );
+    }
+    resultado.sort((a, b) => a.fecha.compareTo(b.fecha));
+    return resultado;
+  }
+
+  DateTime _normalizarDia(DateTime dt) =>
+      DateTime(dt.year, dt.month, dt.day);
+
+  /// Devuelve el historial diario ordenado de más reciente a más antiguo.
+  Future<List<PrecioHistorico>> obtenerHistorial() async {
+    final historial = await _loadHistoryFromLocal();
+    historial.sort((a, b) => b.fecha.compareTo(a.fecha));
+    return historial;
   }
 
   Future<PriceData?> _loadPriceFromLocal() async {
