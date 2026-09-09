@@ -8,6 +8,7 @@
 // (SharedPreferences) se reemplaza sin cambiar la interfaz pública del
 // Notifier.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/diseno.dart';
 import '../../core/services/comprobante_servicio.dart';
@@ -148,21 +149,31 @@ class ConfigComplementos {
   /// Redondea los resultados monetarios a la unidad de mil más cercana.
   final bool redondeoMiles;
 
+  /// Complemento "Ventas POS": desactivación solicitada y diferida al
+  /// Cierre del Ciclo Operativo porque el ciclo vigente ya tiene ventas
+  /// POS (§3.6 — regla de negocio del complemento).
+  final bool ventasPosPendienteDesactivacion;
+
   const ConfigComplementos({
     this.cotizaciones = true,
     this.ventasPos = true,
     this.redondeoMiles = false,
+    this.ventasPosPendienteDesactivacion = false,
   });
 
   ConfigComplementos copyWith({
     bool? cotizaciones,
     bool? ventasPos,
     bool? redondeoMiles,
+    bool? ventasPosPendienteDesactivacion,
   }) {
     return ConfigComplementos(
       cotizaciones: cotizaciones ?? this.cotizaciones,
       ventasPos: ventasPos ?? this.ventasPos,
       redondeoMiles: redondeoMiles ?? this.redondeoMiles,
+      ventasPosPendienteDesactivacion:
+          ventasPosPendienteDesactivacion ??
+          this.ventasPosPendienteDesactivacion,
     );
   }
 }
@@ -213,8 +224,32 @@ class ConfiguracionesEstado {
 
 class ConfiguracionesNotifier extends StateNotifier<ConfiguracionesEstado> {
   ConfiguracionesNotifier() : super(const ConfiguracionesEstado()) {
-    _sincronizarRedondeo(const ConfigComplementos());
-    state = state.copyWith(isCargando: false);
+    _cargarComplementos();
+  }
+
+  // Persistencia de complementos (SharedPreferences). El resto de la
+  // configuración sigue en memoria hasta la integración del Módulo 5.
+  static const _keyCotizaciones = 'complemento_cotizaciones';
+  static const _keyVentasPos = 'complemento_ventas_pos';
+  static const _keyRedondeoMiles = 'complemento_redondeo_miles';
+  static const _keyVentasPosPendiente = 'complemento_ventas_pos_pendiente';
+
+  Future<void> _cargarComplementos() async {
+    ConfigComplementos cargados = const ConfigComplementos();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      cargados = ConfigComplementos(
+        cotizaciones: prefs.getBool(_keyCotizaciones) ?? true,
+        ventasPos: prefs.getBool(_keyVentasPos) ?? true,
+        redondeoMiles: prefs.getBool(_keyRedondeoMiles) ?? false,
+        ventasPosPendienteDesactivacion:
+            prefs.getBool(_keyVentasPosPendiente) ?? false,
+      );
+    } catch (_) {
+      // Entorno sin SharedPreferences (tests): valores por defecto.
+    }
+    _sincronizarRedondeo(cargados);
+    state = state.copyWith(isCargando: false, complementos: cargados);
   }
 
   void _sincronizarRedondeo(ConfigComplementos complementos) {
@@ -239,7 +274,23 @@ class ConfiguracionesNotifier extends StateNotifier<ConfiguracionesEstado> {
 
   void guardarComplementos(ConfigComplementos complementos) {
     _sincronizarRedondeo(complementos);
+    _persistirComplementos(complementos);
     state = state.copyWith(complementos: complementos);
+  }
+
+  Future<void> _persistirComplementos(ConfigComplementos complementos) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyCotizaciones, complementos.cotizaciones);
+      await prefs.setBool(_keyVentasPos, complementos.ventasPos);
+      await prefs.setBool(_keyRedondeoMiles, complementos.redondeoMiles);
+      await prefs.setBool(
+        _keyVentasPosPendiente,
+        complementos.ventasPosPendienteDesactivacion,
+      );
+    } catch (_) {
+      // Entorno sin SharedPreferences (tests): se omite la persistencia.
+    }
   }
 
   /// Realiza una copia de seguridad (simulada) y registra la fecha.

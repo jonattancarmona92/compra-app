@@ -41,6 +41,7 @@ import 'package:compra/features/procesos/liquidaciones_screen.dart';
 // CONFIGURACIONES
 // ============================================================================
 import 'package:compra/features/configuraciones/complementos_screen.dart';
+import 'package:compra/features/configuraciones/configuraciones_provider.dart';
 import 'package:compra/features/configuraciones/copias_de_seguridad_screen.dart';
 import 'package:compra/features/configuraciones/diseno_y_estilos_screen.dart';
 import 'package:compra/features/configuraciones/seguridad_screen.dart';
@@ -303,11 +304,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final estadoInicio = ref.watch(controlInicioProvider);
     final estadoCaja = ref.watch(cajaProvider);
     final estadoLicencia = ref.watch(licenciaProvider);
+    final ventasPosHabilitadas =
+        ref.watch(configuracionesProvider).complementos.ventasPos;
     final inicioOverlay = _buildInicioOverlay(
       estadoInicio,
       estadoCaja.isCajaAbierta,
       estadoLicencia.esVencida,
     );
+
+    // Si POS se desactiva mientras se está dentro de su submenú, se
+    // vuelve al menú principal (§3.6: sin POS visible en ninguna
+    // pantalla).
+    final currentMenu =
+        (ventasPosHabilitadas || _currentMenu != 'POS') ? _currentMenu : null;
 
     final dashboardContent = Scaffold(
       body: SafeArea(
@@ -357,7 +366,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ),
                         );
                       },
-                      child: _currentMenu == null
+                      child: currentMenu == null
                           ? Column(
                               key: const ValueKey('menu_principal'),
                               children: [
@@ -375,10 +384,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               ],
                             )
                           : Column(
-                              key: ValueKey('submenu_$_currentMenu'),
+                              key: ValueKey('submenu_$currentMenu'),
                               children: [
                                 Text(
-                                  _currentMenu!,
+                                  currentMenu,
                                   style: Theme.of(context).textTheme.titleMedium
                                       ?.copyWith(
                                         color: Theme.of(
@@ -388,7 +397,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ),
                                 const SizedBox(height: AppEspaciado.l),
                                 _SubmenuView(
-                                  menuName: _currentMenu!,
+                                  menuName: currentMenu,
                                   onBack: _backToMainMenu,
                                   onMenuSelected: _selectMenu,
                                 ),
@@ -896,12 +905,12 @@ double? _precioANumero(String? price) {
 // MENÚ PRINCIPAL
 // ============================================================================
 
-class _DashboardMenu extends StatelessWidget {
+class _DashboardMenu extends ConsumerWidget {
   final Function(String) onMenuSelected;
 
   const _DashboardMenu({required this.onMenuSelected});
 
-  static const List<(String, IconData)> menuItems = [
+  static const List<(String, IconData)> _todosLosItems = [
     ('Caja', Icons.attach_money),
     ('Procesos', Icons.settings),
     ('POS', Icons.shopping_cart),
@@ -911,7 +920,15 @@ class _DashboardMenu extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // §3.6 — Complemento "Ventas POS": si está desactivado, el módulo
+    // POS desaparece del menú (no se muestra en ninguna pantalla).
+    final ventasPosHabilitadas =
+        ref.watch(configuracionesProvider).complementos.ventasPos;
+    final items = _todosLosItems
+        .where((item) => ventasPosHabilitadas || item.$1 != 'POS')
+        .toList();
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -921,9 +938,9 @@ class _DashboardMenu extends StatelessWidget {
         mainAxisSpacing: AppEspaciado.l,
         childAspectRatio: 1.1,
       ),
-      itemCount: menuItems.length,
+      itemCount: items.length,
       itemBuilder: (context, index) {
-        final item = menuItems[index];
+        final item = items[index];
         return _MenuCard(
           title: item.$1,
           icon: item.$2,

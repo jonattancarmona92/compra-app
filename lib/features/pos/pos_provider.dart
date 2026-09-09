@@ -115,6 +115,10 @@ class VentaPos {
   final DateTime fechaRegistro;
   final String operador;
 
+  /// Ciclo Operativo en el que se registró la venta (§5.5.13:
+  /// `ventas_pos.ciclo_operativo_id`).
+  final int cicloOperativoId;
+
   const VentaPos({
     required this.id,
     this.clienteId,
@@ -123,6 +127,7 @@ class VentaPos {
     required this.total,
     required this.fechaRegistro,
     required this.operador,
+    this.cicloOperativoId = 1,
   });
 }
 
@@ -135,23 +140,37 @@ class PosEstado {
   final List<ProductoPos> productos;
   final List<VentaPos> ventas;
 
+  /// Ciclo Operativo vigente. Al cerrarse un ciclo (Cierres > Cierre de
+  /// Ciclo Operativo) se incrementa con [PosNotifier.iniciarNuevoCiclo]
+  /// y las ventas del ciclo anterior dejan de computar.
+  final int cicloActual;
+
   const PosEstado({
     this.isCargando = true,
     this.productos = const [],
     this.ventas = const [],
+    this.cicloActual = 1,
   });
 
   PosEstado copyWith({
     bool? isCargando,
     List<ProductoPos>? productos,
     List<VentaPos>? ventas,
+    int? cicloActual,
   }) {
     return PosEstado(
       isCargando: isCargando ?? this.isCargando,
       productos: productos ?? this.productos,
       ventas: ventas ?? this.ventas,
+      cicloActual: cicloActual ?? this.cicloActual,
     );
   }
+
+  /// Número de ventas POS registradas en el Ciclo Operativo vigente.
+  /// Condición del complemento "Ventas POS": si es > 0, la desactivación
+  /// queda pendiente hasta el Cierre del Ciclo Operativo.
+  int get ventasEnCicloActual =>
+      ventas.where((v) => v.cicloOperativoId == cicloActual).length;
 
   List<VentaPos> get ventasOrdenadas =>
       [...ventas]..sort((a, b) => b.fechaRegistro.compareTo(a.fechaRegistro));
@@ -419,6 +438,7 @@ class PosNotifier extends StateNotifier<PosEstado> {
       total: total,
       fechaRegistro: DateTime.now(),
       operador: operador,
+      cicloOperativoId: state.cicloActual,
     );
 
     state = state.copyWith(
@@ -426,6 +446,13 @@ class PosNotifier extends StateNotifier<PosEstado> {
       ventas: [...state.ventas, venta],
     );
     return venta;
+  }
+
+  /// §3.3.4 — se invoca al completarse el Cierre del Ciclo Operativo:
+  /// abre un nuevo ciclo POS en silencio (las ventas anteriores quedan
+  /// asociadas al ciclo cerrado).
+  void iniciarNuevoCiclo() {
+    state = state.copyWith(cicloActual: state.cicloActual + 1);
   }
 }
 

@@ -23,6 +23,7 @@ import '../../core/widgets/pin_entry_widget.dart';
 import '../configuraciones/configuraciones_provider.dart';
 import '../configuraciones/impresora_bluetooth_servicio.dart';
 import '../inicio/control_inicio_provider.dart';
+import '../pos/pos_provider.dart';
 import '../procesos/procesos_provider.dart';
 import 'caja_provider.dart';
 import 'widgets/banner_caja_widget.dart';
@@ -405,12 +406,20 @@ class _CierresScreenState extends ConsumerState<CierresScreen> {
       ref.read(controlInicioProvider.notifier).cerrarCaja();
       ref.read(controlInicioProvider.notifier).crearPeriodoOperativoSilencioso();
 
+      // d) POS: se abre un nuevo ciclo (las ventas del ciclo anterior
+      // dejan de computar) y se aplica la desactivación pendiente del
+      // complemento "Ventas POS" (§3.6), diferida a este cierre.
+      ref.read(posProvider.notifier).iniciarNuevoCiclo();
+      final ventasPosDesactivadas =
+          _aplicarDesactivacionVentasPosPendiente();
+
       if (mounted) {
         setState(() => _cicloCerrado = true);
         await _mostrarExitoCiclo(
           lotesConstituidos: lotesConstituidos,
           saldoTeorico: saldoTeorico,
           fechaCierre: fechaCierre,
+          ventasPosDesactivadas: ventasPosDesactivadas,
         );
       }
     } catch (_) {
@@ -425,10 +434,26 @@ class _CierresScreenState extends ConsumerState<CierresScreen> {
     }
   }
 
+  /// §3.6 — Aplica la desactivación pendiente del complemento "Ventas
+  /// POS" al completarse el Cierre del Ciclo Operativo. Devuelve `true`
+  /// si la desactivación diferida se materializó.
+  bool _aplicarDesactivacionVentasPosPendiente() {
+    final complementos = ref.read(configuracionesProvider).complementos;
+    if (!complementos.ventasPosPendienteDesactivacion) return false;
+    ref.read(configuracionesProvider.notifier).guardarComplementos(
+          complementos.copyWith(
+            ventasPos: false,
+            ventasPosPendienteDesactivacion: false,
+          ),
+        );
+    return true;
+  }
+
   Future<void> _mostrarExitoCiclo({
     required List<LoteBodega> lotesConstituidos,
     required double saldoTeorico,
     required DateTime fechaCierre,
+    bool ventasPosDesactivadas = false,
   }) async {
     final resumen = ref
         .read(procesosProvider)
@@ -455,6 +480,18 @@ class _CierresScreenState extends ConsumerState<CierresScreen> {
                 'Cierre de Ciclo Operativo completado. El siguiente '
                 'Ciclo Operativo quedó abierto en silencio.',
               ),
+              if (ventasPosDesactivadas) ...[
+                const SizedBox(height: AppEspaciado.s),
+                Text(
+                  'Ventas POS se desactivó tras el cierre del ciclo, como '
+                  'se había programado.',
+                  style: TextStyle(
+                    color: AppPaletaOficial.amarillo,
+                    fontSize: AppEscalaTipografica.notas,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
               const Divider(height: AppEspaciado.l),
               _FilaReporte(
                 label: 'Fecha de cierre',
