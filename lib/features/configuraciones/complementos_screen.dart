@@ -163,10 +163,7 @@ class ComplementosScreen extends ConsumerWidget {
           .toUpperCase();
       if (!context.mounted) return;
     }
-    final idIngresado = await _pedirIdDispositivo(
-      context,
-      idReferencia: idGuardado,
-    );
+    final idIngresado = await _pedirIdDispositivo(context);
     if (idIngresado == null) return; // El usuario canceló.
     if (!context.mounted) return;
 
@@ -247,10 +244,7 @@ class ComplementosScreen extends ConsumerWidget {
   }
 
   /// Dialog integrado para pedir el ID de dispositivo al operador.
-  Future<String?> _pedirIdDispositivo(
-    BuildContext context, {
-    required String idReferencia,
-  }) async {
+  Future<String?> _pedirIdDispositivo(BuildContext context) async {
     return showDialog<String>(
       context: context,
       builder: (context) {
