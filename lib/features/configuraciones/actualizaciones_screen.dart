@@ -1,6 +1,6 @@
 // ==================== CONFIGURACIONES > ACTUALIZACIONES ====================
-// Consulta la versión publicada en Firebase Remote Config y, si hay una
-// nueva, permite descargarla e instalarla OTA. Reglas de negocio:
+// Consulta la versión publicada en GitHub Releases y, si hay una nueva,
+// permite descargarla e instalarla OTA. Reglas de negocio:
 //   1. No se actualiza si hay un turno de caja abierto (alerta bloqueante).
 //   2. Se solicita el ID de dispositivo (4 caracteres) y debe coincidir
 //      con el guardado en la app (hardware binding).
@@ -22,16 +22,6 @@ import '../inicio/control_inicio_provider.dart';
 import 'licencia_provider.dart';
 import 'update_service.dart';
 
-enum _FuenteActualizacion {
-  github('GitHub Releases', Icons.cloud_download_outlined),
-  firebase('Firebase / Remote Config', Icons.cloud_outlined);
-
-  const _FuenteActualizacion(this.nombre, this.icono);
-
-  final String nombre;
-  final IconData icono;
-}
-
 class ActualizacionesScreen extends ConsumerStatefulWidget {
   const ActualizacionesScreen({super.key, required this.onBack});
 
@@ -48,7 +38,6 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
   final UpdateService _servicio = UpdateService();
   final _idController = TextEditingController();
 
-  _FuenteActualizacion _fuente = _FuenteActualizacion.github;
   String _versionInstalada = '';
   String _versionInstaladaNombre = '';
   int _codigoInstalado = 1;
@@ -102,9 +91,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
       _disponible = null;
     });
     try {
-      final info = _fuente == _FuenteActualizacion.github
-          ? await _servicio.obtenerDisponibleGitHub()
-          : await _servicio.obtenerDisponible();
+      final info = await _servicio.obtenerDisponibleGitHub();
       if (!mounted) return;
       setState(() {
         _disponible = info;
@@ -454,8 +441,6 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
         children: [
           _buildTarjetaVersion(),
           const SizedBox(height: AppEspaciado.m),
-          _buildSelectorFuente(),
-          const SizedBox(height: AppEspaciado.m),
           _buildBotonBuscar(),
           if (_buscando) ...[
             const SizedBox(height: AppEspaciado.m),
@@ -538,33 +523,6 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildSelectorFuente() {
-    return DropdownButtonFormField<_FuenteActualizacion>(
-      initialValue: _fuente,
-      decoration: const InputDecoration(
-        labelText: 'Fuente de actualización',
-        prefixIcon: Icon(Icons.travel_explore),
-        border: OutlineInputBorder(),
-      ),
-      items: _FuenteActualizacion.values
-          .map(
-            (f) => DropdownMenuItem(
-              value: f,
-              child: Text(f.nombre),
-            ),
-          )
-          .toList(),
-      onChanged: (v) {
-        if (v == null || _descargando) return;
-        setState(() {
-          _fuente = v;
-          _disponible = null;
-          _errorBusqueda = null;
-        });
-      },
     );
   }
 

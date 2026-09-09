@@ -1,20 +1,19 @@
 // ==================== ACTUALIZACIONES OTA ====================
-// Servicio que consulta Firebase Remote Config (proyecto
-// coffee-control-2d1d4) para comparar la versión instalada con la
-// publicada y, si procede, descarga e instala el APK con ota_update.
-// Antes de descargar se crea una copia local de la base SQLite.
+// Servicio que consulta el último release del repositorio público
+// jonattancarmona92/compra-app en GitHub Releases para comparar la
+// versión instalada con la publicada y, si procede, descarga e instala
+// el APK con ota_update. Antes de descargar se crea una copia local de
+// la base SQLite.
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:http/http.dart' as http;
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-/// Estado de la versión publicada en Remote Config.
+/// Estado de la versión publicada en GitHub Releases.
 class InfoActualizacion {
   const InfoActualizacion({
     required this.versionCodigo,
@@ -54,8 +53,6 @@ class UpdateService {
       'https://api.github.com/repos/$repoGitHub/releases/latest';
   static const String apkAssetNombre = 'Coffe.Control.apk';
 
-  static bool _firebaseListo = false;
-
   final OtaUpdate _ota = OtaUpdate();
 
   /// Compara dos versiones semánticas ("1.2.3" vs "v1.20.0").
@@ -71,19 +68,6 @@ class UpdateService {
       if (x != y) return x.compareTo(y);
     }
     return 0;
-  }
-
-  /// Inicializa Firebase una sola vez. No lanza; devuelve si quedó listo
-  /// para que la pantalla informe (la app funciona offline sin Firebase).
-  Future<bool> asegurarFirebase() async {
-    if (_firebaseListo) return true;
-    try {
-      await Firebase.initializeApp();
-      _firebaseListo = true;
-    } catch (_) {
-      _firebaseListo = false;
-    }
-    return _firebaseListo;
   }
 
   /// Versión instalada (buildNumber = versionCode en Play / pubspec).
@@ -150,43 +134,6 @@ class UpdateService {
     } catch (e) {
       throw UpdateException('No se pudo consultar GitHub: $e');
     }
-  }
-
-  /// Consulta y activa Remote Config. Lanza [UpdateException] si el
-  /// servidor no está disponible.
-  Future<InfoActualizacion> obtenerDisponible() async {
-    if (!await asegurarFirebase()) {
-      throw const UpdateException(
-        'Firebase no está disponible. Verifique la configuración del '
-        'proyecto coffee-control-2d1d4 y la conexión.',
-      );
-    }
-    final rc = FirebaseRemoteConfig.instance;
-    try {
-      await rc.setConfigSettings(
-        RemoteConfigSettings(
-          fetchTimeout: const Duration(seconds: 15),
-          minimumFetchInterval: Duration.zero,
-        ),
-      );
-      await rc.setDefaults(const {
-        'latest_version_code': 0,
-        'latest_version_name': '',
-        'apk_download_url': '',
-        'changelog': '',
-        'is_critical_update': false,
-      });
-      await rc.fetchAndActivate();
-    } on FirebaseException catch (e) {
-      throw UpdateException('No se pudo consultar el servidor: ${e.code}');
-    }
-    return InfoActualizacion(
-      versionCodigo: rc.getInt('latest_version_code'),
-      versionNombre: rc.getString('latest_version_name'),
-      apkUrl: rc.getString('apk_download_url'),
-      cambios: rc.getString('changelog'),
-      esCritica: rc.getBool('is_critical_update'),
-    );
   }
 
   /// Copia de seguridad de la base SQLite antes de instalar la actualización.

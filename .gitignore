@@ -47,8 +47,5 @@ app.*.map.json
 /packages/*/android/build/
 /packages/*/android/.gradle/
 
-# Firebase CLI local cache
-.firebase/
-
 # APK publicado (artefacto de build, se sube a GitHub Releases)
-/public/app-release.apk
+# (los releases pueden incluir binarios vía GitHub Releases)

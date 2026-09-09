@@ -63,9 +63,6 @@ dependencies:
   # las librerías oficiales para comprobantes, informes y libros de apoyo.
   pdf: ^3.11.3
   printing: ^5.15.0
-  firebase_core: ^4.14.0
-  firebase_remote_config: ^6.6.0
-  firebase_storage: ^13.5.0
   package_info_plus: ^9.0.1
   ota_update: ^7.1.0
 
