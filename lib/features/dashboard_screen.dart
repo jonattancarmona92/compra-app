@@ -50,6 +50,7 @@ import 'package:compra/features/configuraciones/impresora_screen.dart';
 import 'package:compra/features/configuraciones/actualizaciones_screen.dart';
 import 'package:compra/features/configuraciones/licencia_provider.dart';
 import 'package:compra/features/configuraciones/licencia_screen.dart';
+import 'package:compra/features/configuraciones/soporte_screen.dart';
 import 'package:compra/features/inicio/licencia_bloqueo_screen.dart';
 
 // ============================================================================
@@ -238,6 +239,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
       case 'Actualizaciones':
         _openScreen(() => ActualizacionesScreen(onBack: _closeCurrentScreen));
+        break;
+
+      case 'Soporte':
+        _openScreen(() => SoporteScreen(onBack: _closeCurrentScreen));
         break;
 
       // ----------------------------------------------------------------------
@@ -731,36 +736,34 @@ double? _precioANumero(String? price) {
 
                         const SizedBox(height: AppEspaciado.m),
 
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              priceData != null
-                                  ? _formatearValor(
-                                      _precioANumero(priceData.price) ?? 0,
-                                    )
-                                  : '--',
-                              style: banner.priceBannerPriceStyle.copyWith(
-                                color: esObsoleto
-                                    ? banner.alertaObsolescenciaColor
-                                    : banner.priceBannerPriceStyle.color,
-                              ),
-                            ),
-                            if (priceData != null &&
-                                variacionPesos.isNotEmpty) ...[
-                              const SizedBox(width: AppEspaciado.m),
-                              _buildVariacion(
-                                banner,
-                                variacionPesos,
-                                variacionPor,
-                                tendencia,
-                              ),
-                            ] else if (tendencia != null) ...[
-                              const SizedBox(width: AppEspaciado.m),
-                              _buildFlechaTendencia(banner, tendencia),
-                            ],
-                          ],
+                        Text(
+                          priceData != null
+                              ? _formatearValor(
+                                  _precioANumero(priceData.price) ?? 0,
+                                )
+                              : '--',
+                          style: banner.priceBannerPriceStyle.copyWith(
+                            color: esObsoleto
+                                ? banner.alertaObsolescenciaColor
+                                : banner.priceBannerPriceStyle.color,
+                          ),
                         ),
+
+                        // §3.9 — el diferencial va debajo del precio actual,
+                        // con color de tendencia y fuente más legible.
+                        if (priceData != null &&
+                            variacionPesos.isNotEmpty) ...[
+                          const SizedBox(height: AppEspaciado.s),
+                          _buildVariacion(
+                            banner,
+                            variacionPesos,
+                            variacionPor,
+                            tendencia,
+                          ),
+                        ] else if (tendencia != null) ...[
+                          const SizedBox(height: AppEspaciado.s),
+                          _buildFlechaTendencia(banner, tendencia),
+                        ],
 
                         const SizedBox(height: AppEspaciado.m),
 
@@ -888,8 +891,9 @@ double? _precioANumero(String? price) {
             Flexible(
               child: Text(
                 '$signo$montoTexto$sufijo',
-                style: banner.priceBannerUpdateStyle.copyWith(
+                style: banner.priceBannerPriceStyle.copyWith(
                   color: color,
+                  fontSize: AppEscalaTipografica.subtitulo,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1075,6 +1079,7 @@ class _SubmenuView extends StatelessWidget {
       ('Actualizaciones', Icons.system_update),
       ('Copias de Seguridad', Icons.backup),
       ('Complementos', Icons.extension),
+      ('Soporte', Icons.support_agent),
     ],
   };
 

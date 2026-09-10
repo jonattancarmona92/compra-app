@@ -35,6 +35,7 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
   final _clienteController = TextEditingController();
   final _pesoBrutoController = TextEditingController();
   final _descuentoHumedadKgController = TextEditingController();
+  final _pesoFinalMojadoController = TextEditingController();
   final _pesoController = TextEditingController();
   final _precioCargaController = TextEditingController();
   final _grameraController = TextEditingController();
@@ -60,6 +61,7 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
     super.initState();
     _pesoBrutoController.addListener(_actualizarCalculos);
     _descuentoHumedadKgController.addListener(_actualizarCalculos);
+    _pesoFinalMojadoController.addListener(_actualizarCalculos);
     _pesoController.addListener(_actualizarCalculos);
     _precioCargaController.addListener(_actualizarCalculos);
     _grameraController.addListener(_onGrameraEditada);
@@ -104,6 +106,7 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
     _clienteController.dispose();
     _pesoBrutoController.dispose();
     _descuentoHumedadKgController.dispose();
+    _pesoFinalMojadoController.dispose();
     _pesoController.dispose();
     _precioCargaController.dispose();
     _grameraController.dispose();
@@ -121,12 +124,18 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
       );
 
       if (_tipoCafe == 'Mojado') {
-        // §7.2 — el operador edita los kg de descuento por humedad
-        // directamente: Peso Neto = Peso Bruto - Kg Descuento.
+        // §7.2 — el operador edita los kg de descuento por humedad:
+        // Peso Neto = Peso Bruto - Kg Descuento. El peso resultante
+        // también es editable y tiene prioridad sobre el cálculo
+        // (peso real registrado en la báscula).
         final pesoBruto = double.tryParse(_pesoBrutoController.text) ?? 0.0;
         final descuentoKg =
             double.tryParse(_descuentoHumedadKgController.text) ?? 0.0;
-        _pesoNeto = pesoBruto - descuentoKg;
+        final pesoFinalEditado =
+            double.tryParse(_pesoFinalMojadoController.text) ?? 0.0;
+        _pesoNeto = pesoFinalEditado > 0
+            ? pesoFinalEditado
+            : pesoBruto - descuentoKg;
         if (_pesoNeto < 0) _pesoNeto = 0.0;
 
         _precioKg = precioCarga / 125;
@@ -209,6 +218,16 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
         Notificaciones.error(
           context,
           'Complete el descuento por humedad en kilogramos',
+        );
+        return false;
+      }
+      final pesoBruto = double.tryParse(_pesoBrutoController.text) ?? 0.0;
+      final pesoFinalMojado =
+          double.tryParse(_pesoFinalMojadoController.text);
+      if (pesoFinalMojado != null && pesoFinalMojado > pesoBruto) {
+        Notificaciones.error(
+          context,
+          'El peso final no puede ser mayor que el peso bruto.',
         );
         return false;
       }
@@ -716,6 +735,7 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
     _filtroCliente = '';
     _pesoBrutoController.clear();
     _descuentoHumedadKgController.clear();
+    _pesoFinalMojadoController.clear();
     _pesoController.clear();
     _precioCargaController.clear();
     _grameraController.clear();
@@ -1090,6 +1110,7 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
                 _pesoController.clear();
                 _pesoBrutoController.clear();
                 _descuentoHumedadKgController.clear();
+                _pesoFinalMojadoController.clear();
                 _grameraController.clear();
                 _factorController.clear();
                 _descuentoEmpaqueKgController.clear();
@@ -1133,6 +1154,19 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: 'Descuento por Humedad (kg)',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppEspaciado.radioLg),
+                  ),
+                ),
+              ),
+              SizedBox(height: AppEspaciado.m),
+              TextFormField(
+                controller: _pesoFinalMojadoController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Peso Final (kg) — editable',
+                  helperText: 'Se calcula Peso Bruto − Descuento. '
+                      'Puede ajustarlo al peso real de la báscula.',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppEspaciado.radioLg),
                   ),
@@ -1288,6 +1322,19 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
                   ),
                 ],
               ),
+            ),
+          ] else if (_tipoCafe == 'Mojado') ...[
+            _resumenFila(
+              'Peso Bruto',
+              '${double.tryParse(_pesoBrutoController.text) ?? 0.0} kg',
+            ),
+            _resumenFila(
+              'Descuento Humedad',
+              '${double.tryParse(_descuentoHumedadKgController.text) ?? 0.0} kg',
+            ),
+            _resumenFila(
+              'Peso Final',
+              '${_pesoNeto.toStringAsFixed(2)} kg',
             ),
           ] else ...[
             _resumenFila('Peso Neto', '${_pesoNeto.toStringAsFixed(2)} kg'),
