@@ -129,7 +129,6 @@ class _LicenciaScreenState extends ConsumerState<LicenciaScreen> {
   /// el cliente elige el plan, consigna, adjunta el comprobante (foto o
   /// galería) y lo envía por WhatsApp junto con el ID de dispositivo.
   Widget _buildAdquirirLicencia() {
-    final estado = ref.watch(licenciaProvider);
     final plan = _planes[_planSeleccionado];
 
     return Column(
@@ -234,8 +233,9 @@ class _LicenciaScreenState extends ConsumerState<LicenciaScreen> {
         ),
         const SizedBox(height: AppEspaciado.m),
         Text(
-          '2. Envíe por WhatsApp: foto del recibo o comprobante, junto con '
-          'su ID de dispositivo. Este equipo usa el ID: ${estado.dispositivoId.isEmpty ? 'pendiente de generar' : estado.dispositivoId}.',
+          '2. Envíe por WhatsApp: foto del recibo o comprobante. '
+          'Su ID de dispositivo se adjuntará automáticamente al mensaje '
+          '(por seguridad no se muestra en pantalla).',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: AppEspaciado.m),
