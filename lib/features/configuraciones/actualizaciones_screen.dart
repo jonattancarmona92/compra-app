@@ -156,7 +156,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppPaletaOficial.blanco,
+        
         icon: const Icon(Icons.lock_outline, color: AppPaletaOficial.rojo),
         title: const Text('Turno de caja abierto'),
         content: const Text(
@@ -190,14 +190,13 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
     final confirmado = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppPaletaOficial.blanco,
+        
         title: const Text('Confirmar cierre de Caja'),
         content: Text(
           'Saldo teórico final: '
           '${CurrencyFormatter.formatValue(saldoTeorico)}\n\n'
           'Cerrar la caja permite continuar con la actualización. '
           'Esta acción requiere PIN de seguridad.',
-          style: const TextStyle(color: AppPaletaOficial.negro),
         ),
         actions: [
           TextButton(
@@ -242,7 +241,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppPaletaOficial.blanco,
+        
         title: const Text('Autorización'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -297,7 +296,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppPaletaOficial.blanco,
+        
         icon: const Icon(Icons.gpp_bad_outlined, color: AppPaletaOficial.rojo),
         title: const Text('ID no válido'),
         content: const Text(
@@ -320,7 +319,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => const AlertDialog(
-        backgroundColor: AppPaletaOficial.blanco,
+        
         content: Row(
           children: [
             SizedBox(
@@ -452,7 +451,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
             const SizedBox(height: AppEspaciado.m),
             Card(
               elevation: 0,
-              color: AppPaletaOficial.blanco,
+              color: AppDiseno.superficie(context),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
                 side: const BorderSide(color: AppPaletaOficial.rojo),
@@ -492,10 +491,12 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
   Widget _buildTarjetaVersion() {
     return Card(
       elevation: 0,
-      color: AppPaletaOficial.blanco,
+      color: AppDiseno.superficie(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-        side: const BorderSide(color: Color(0xFFE0D8D0)),
+        side: BorderSide(
+          color: AppDiseno.bordeTarjeta(context),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppEspaciado.m),
@@ -579,7 +580,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
         const SizedBox(height: AppEspaciado.s),
         Card(
           elevation: 0,
-          color: AppPaletaOficial.blanco,
+          color: AppDiseno.superficie(context),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
             side: BorderSide(
@@ -587,7 +588,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
                   ? info.esCritica
                       ? AppPaletaOficial.rojo
                       : AppPaletaOficial.cafe
-                  : const Color(0xFFE0D8D0),
+                  : AppDiseno.bordeTarjeta(context),
             ),
           ),
           child: Padding(
@@ -691,10 +692,12 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
   Widget _buildProgresoDescarga() {
     return Card(
       elevation: 0,
-      color: AppPaletaOficial.blanco,
+      color: AppDiseno.superficie(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-        side: const BorderSide(color: Color(0xFFE0D8D0)),
+        side: BorderSide(
+          color: AppDiseno.bordeTarjeta(context),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppEspaciado.m),

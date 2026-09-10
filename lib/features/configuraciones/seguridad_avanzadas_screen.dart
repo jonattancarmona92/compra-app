@@ -63,7 +63,7 @@ class _SeguridadAvanzadasScreenState
     return showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppPaletaOficial.blanco,
+      backgroundColor: AppDiseno.superficie(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppEspaciado.radioLg)),
       ),
@@ -138,7 +138,7 @@ class _SeguridadAvanzadasScreenState
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppPaletaOficial.blanco,
+        backgroundColor: AppDiseno.superficie(context),
         title: const Text('Cambiar PIN de Operación'),
         content: Form(
           key: formKey,
@@ -284,7 +284,7 @@ class _SeguridadAvanzadasScreenState
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppPaletaOficial.blanco,
+        backgroundColor: AppDiseno.superficie(context),
         title: const Text('Restaurar copia de seguridad'),
         content: SizedBox(
           width: double.maxFinite,
@@ -336,7 +336,7 @@ class _SeguridadAvanzadasScreenState
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppPaletaOficial.blanco,
+        backgroundColor: AppDiseno.superficie(context),
         title: const Text('¿Restaurar esta copia?'),
         content: const Text(
           'Se reemplazará la base de datos actual con la copia seleccionada. '
@@ -389,7 +389,7 @@ class _SeguridadAvanzadasScreenState
     final confirmado = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppPaletaOficial.blanco,
+        backgroundColor: AppDiseno.superficie(context),
         title: const Text('Limpiar todos los datos'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -479,10 +479,10 @@ class _SeguridadAvanzadasScreenState
       children: [
         Card(
           elevation: 0,
-          color: AppPaletaOficial.blanco,
+          color: AppDiseno.superficie(context),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-            side: const BorderSide(color: Color(0xFFE0D8D0)),
+            side: BorderSide(color: AppDiseno.bordeTarjeta(context)),
           ),
           child: Padding(
             padding: const EdgeInsets.all(AppEspaciado.m),
@@ -593,7 +593,7 @@ class _SeguridadAvanzadasScreenState
         const SizedBox(height: AppEspaciado.s),
         Card(
           elevation: 0,
-          color: AppPaletaOficial.blanco,
+          color: AppDiseno.superficie(context),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
             side: const BorderSide(color: AppPaletaOficial.rojo),
@@ -627,10 +627,10 @@ class _SeguridadAvanzadasScreenState
   }) {
     return Card(
       elevation: 0,
-      color: AppPaletaOficial.blanco,
+      color: AppDiseno.superficie(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-        side: const BorderSide(color: Color(0xFFE0D8D0)),
+        side: BorderSide(color: AppDiseno.bordeTarjeta(context)),
       ),
       child: ListTile(
         leading: Icon(icono, color: AppPaletaOficial.cafe),

@@ -176,7 +176,7 @@ class _LicenciaScreenState extends ConsumerState<LicenciaScreen> {
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(AppEspaciado.radioLg),
               border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant,
+                color: AppDiseno.bordeTarjeta(context),
               ),
             ),
             child: Image.asset(
@@ -196,7 +196,7 @@ class _LicenciaScreenState extends ConsumerState<LicenciaScreen> {
         Container(
           padding: const EdgeInsets.all(AppEspaciado.m),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainer,
+            color: AppDiseno.superficie(context),
             borderRadius: BorderRadius.circular(AppEspaciado.radioLg),
           ),
           child: Column(

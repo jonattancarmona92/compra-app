@@ -318,10 +318,12 @@ class _ComplementoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: AppPaletaOficial.blanco,
+      color: AppDiseno.superficie(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-        side: const BorderSide(color: Color(0xFFE0D8D0)),
+        side: BorderSide(
+          color: AppDiseno.bordeTarjeta(context),
+        ),
       ),
       child: SwitchListTile(
         value: valor,
@@ -382,10 +384,12 @@ class _ReactivarVentasPosTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: AppPaletaOficial.blanco,
+      color: AppDiseno.superficie(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-        side: const BorderSide(color: Color(0xFFE0D8D0)),
+        side: BorderSide(
+          color: AppDiseno.bordeTarjeta(context),
+        ),
       ),
       child: ListTile(
         leading: const Icon(

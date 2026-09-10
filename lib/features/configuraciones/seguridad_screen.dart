@@ -73,10 +73,12 @@ class SeguridadScreen extends ConsumerWidget {
           const SizedBox(height: AppEspaciado.l),
           Card(
             elevation: 0,
-            color: AppPaletaOficial.blanco,
+            color: AppDiseno.superficie(context),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-              side: const BorderSide(color: Color(0xFFE0D8D0)),
+              side: BorderSide(
+                color: AppDiseno.bordeTarjeta(context),
+              ),
             ),
             child: ListTile(
               leading: const Icon(
@@ -165,10 +167,12 @@ class _SeguridadTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: AppPaletaOficial.blanco,
+      color: AppDiseno.superficie(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-        side: const BorderSide(color: Color(0xFFE0D8D0)),
+        side: BorderSide(
+          color: AppDiseno.bordeTarjeta(context),
+        ),
       ),
       child: SwitchListTile(
         value: valor,
@@ -199,10 +203,12 @@ class SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: AppPaletaOficial.blanco,
+      color: AppDiseno.superficie(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-        side: const BorderSide(color: Color(0xFFE0D8D0)),
+        side: BorderSide(
+          color: AppDiseno.bordeTarjeta(context),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppEspaciado.m),

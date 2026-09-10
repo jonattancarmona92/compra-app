@@ -36,6 +36,29 @@ class AppPaletaOficial {
 }
 
 /// =====================================================================
+/// ACCESORES DE SUPERFICIE/BORDE/TEXTO SEGÚN EL ESTILO ACTIVO — §4.4/§4.10
+/// Las pantallas NO deben fijar colores de superficie con literales o
+/// con AppPaletaOficial.blanco/negro (que no se adaptan). Para que la
+/// UI se adapte a los estilos claro, oscuro y corporativo (definidos en
+/// core/estilos/*), los widgets deben consultar estos accesores, que
+/// leen el colorScheme establecido por cada estilo.
+/// =====================================================================
+class AppDiseno {
+  /// Fondo estándar de tarjetas y paneles (blanco en claro/corporativo,
+  /// #1B1B1B en oscuro, según el estilo activo).
+  static Color superficie(BuildContext context) =>
+      Theme.of(context).colorScheme.surface;
+
+  /// Borde sutil estándar de tarjetas y contenedores.
+  static Color bordeTarjeta(BuildContext context) =>
+      Theme.of(context).colorScheme.outlineVariant;
+
+  /// Texto secundario (descripciones, direcciones, notas, campos).
+  static Color textoSecundario(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurfaceVariant;
+}
+
+/// =====================================================================
 /// ESCALA TIPOGRÁFICA — Informe Global §4.6
 /// =====================================================================
 class AppEscalaTipografica {

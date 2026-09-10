@@ -55,10 +55,12 @@ class _CopiasDeSeguridadScreenState
         children: [
           Card(
             elevation: 0,
-            color: AppPaletaOficial.blanco,
+            color: AppDiseno.superficie(context),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-              side: const BorderSide(color: Color(0xFFE0D8D0)),
+              side: BorderSide(
+                color: AppDiseno.bordeTarjeta(context),
+              ),
             ),
             child: Padding(
               padding: const EdgeInsets.all(AppEspaciado.m),
@@ -74,11 +76,11 @@ class _CopiasDeSeguridadScreenState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Última copia',
                           style: TextStyle(
                             fontSize: AppEscalaTipografica.notas,
-                            color: Color(0xFF8D8D8D),
+                            color: AppDiseno.textoSecundario(context),
                           ),
                         ),
                         const SizedBox(height: AppEspaciado.xs),

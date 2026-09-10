@@ -525,10 +525,10 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
 
     return Card(
       elevation: 0,
-      color: AppPaletaOficial.blanco,
+      color: AppDiseno.superficie(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-        side: const BorderSide(color: Color(0xFFE0D8D0)),
+        side: BorderSide(color: AppDiseno.bordeTarjeta(context)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppEspaciado.m),
@@ -568,9 +568,9 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
                     const SizedBox(height: AppEspaciado.xs),
                     Text(
                       impresora.direccionBluetooth,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: AppEscalaTipografica.notas,
-                        color: Color(0xFF6E6E6E),
+                        color: AppDiseno.textoSecundario(context),
                       ),
                     ),
                   ],
@@ -662,12 +662,12 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
         decoration: BoxDecoration(
           color: seleccionado
               ? AppPaletaOficial.cafe
-              : AppPaletaOficial.blanco,
+              : AppDiseno.superficie(context),
           borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
           border: Border.all(
             color: seleccionado
                 ? AppPaletaOficial.cafe
-                : const Color(0xFFE0D8D0),
+                : AppDiseno.bordeTarjeta(context),
             width: 1,
           ),
         ),
@@ -681,7 +681,7 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
                 fontSize: AppEscalaTipografica.cuerpo,
                 color: seleccionado
                     ? AppPaletaOficial.blanco
-                    : AppPaletaOficial.cafe,
+                    : Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: AppEspaciado.xs),
@@ -691,7 +691,7 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
                 fontSize: AppEscalaTipografica.notas,
                 color: seleccionado
                     ? const Color(0x99FFFFFF)
-                    : const Color(0xFF6E6E6E),
+                    : AppDiseno.textoSecundario(context),
               ),
             ),
           ],
@@ -727,10 +727,12 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
     if (_cargandoVinculados) {
       return Card(
         elevation: 0,
-        color: AppPaletaOficial.blanco,
+        color: AppDiseno.superficie(context),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-          side: const BorderSide(color: Color(0xFFE0D8D0)),
+          side: BorderSide(
+            color: AppDiseno.bordeTarjeta(context),
+          ),
         ),
         child: const Padding(
           padding: EdgeInsets.all(AppEspaciado.m),
@@ -744,10 +746,12 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
     if (_vinculados.isEmpty) {
       return Card(
         elevation: 0,
-        color: AppPaletaOficial.blanco,
+        color: AppDiseno.superficie(context),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-          side: const BorderSide(color: Color(0xFFE0D8D0)),
+          side: BorderSide(
+            color: AppDiseno.bordeTarjeta(context),
+          ),
         ),
         child: const Padding(
           padding: EdgeInsets.all(AppEspaciado.m),
@@ -761,10 +765,10 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
     }
     return Card(
       elevation: 0,
-      color: AppPaletaOficial.blanco,
+      color: AppDiseno.superficie(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-        side: const BorderSide(color: Color(0xFFE0D8D0)),
+        side: BorderSide(color: AppDiseno.bordeTarjeta(context)),
       ),
       child: Column(
         children: [
@@ -803,9 +807,9 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
       ),
       subtitle: Text(
         dispositivo.address,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: AppEscalaTipografica.notas,
-          color: Color(0xFF6E6E6E),
+          color: AppDiseno.textoSecundario(context),
         ),
       ),
       trailing: Row(
@@ -916,10 +920,12 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
     if (_escaneando && _dispositivos.isEmpty) {
       return Card(
         elevation: 0,
-        color: AppPaletaOficial.blanco,
+        color: AppDiseno.superficie(context),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-          side: const BorderSide(color: Color(0xFFE0D8D0)),
+          side: BorderSide(
+            color: AppDiseno.bordeTarjeta(context),
+          ),
         ),
         child: const Padding(
           padding: EdgeInsets.all(AppEspaciado.m),
@@ -933,10 +939,12 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
     if (_dispositivos.isEmpty) {
       return Card(
         elevation: 0,
-        color: AppPaletaOficial.blanco,
+        color: AppDiseno.superficie(context),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-          side: const BorderSide(color: Color(0xFFE0D8D0)),
+          side: BorderSide(
+            color: AppDiseno.bordeTarjeta(context),
+          ),
         ),
         child: const Padding(
           padding: EdgeInsets.all(AppEspaciado.m),
@@ -952,10 +960,10 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
     }
     return Card(
       elevation: 0,
-      color: AppPaletaOficial.blanco,
+      color: AppDiseno.superficie(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
-        side: const BorderSide(color: Color(0xFFE0D8D0)),
+        side: BorderSide(color: AppDiseno.bordeTarjeta(context)),
       ),
       child: Column(
         children: [
@@ -994,9 +1002,9 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
       ),
       subtitle: Text(
         dispositivo.address,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: AppEscalaTipografica.notas,
-          color: Color(0xFF6E6E6E),
+          color: AppDiseno.textoSecundario(context),
         ),
       ),
       trailing: esActual
