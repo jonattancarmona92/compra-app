@@ -27,11 +27,12 @@ class _LicenciaScreenState extends ConsumerState<LicenciaScreen> {
   final _formatoFecha = DateFormat('dd/MM/yyyy');
 
   /// §3.8 — planes de adquisición de licencia por consignación:
-  /// precio, días de vigencia y plan del sistema que se activará.
+  /// precio, días de vigencia, plan del sistema que se activará y el QR
+  /// de pago (Bancolombia) correspondiente.
   static const _planes = [
-    _PlanLicencia('1 mes', 30, 30000),
-    _PlanLicencia('6 meses', 180, 150000),
-    _PlanLicencia('12 meses', 365, 240000),
+    _PlanLicencia('1 mes', 30, 30000, 'assets/qr/30.jpg'),
+    _PlanLicencia('6 meses', 180, 150000, 'assets/qr/150.jpg'),
+    _PlanLicencia('12 meses', 365, 240000, 'assets/qr/240.jpg'),
   ];
   int _planSeleccionado = 0;
 
@@ -135,7 +136,8 @@ class _LicenciaScreenState extends ConsumerState<LicenciaScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          '1. Elija el plan y consigne el valor en la cuenta indicada.',
+          '1. Elija el plan y pague escaneando el QR o consignando en la '
+          'cuenta indicada.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: AppEspaciado.m),
@@ -158,6 +160,40 @@ class _LicenciaScreenState extends ConsumerState<LicenciaScreen> {
           ),
         ),
         const SizedBox(height: AppEspaciado.m),
+        Center(
+          child: Text(
+            'Escanea el QR para pagar el plan seleccionado',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.tertiary,
+            ),
+          ),
+        ),
+        const SizedBox(height: AppEspaciado.m),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(AppEspaciado.m),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(AppEspaciado.radioLg),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
+            child: Image.asset(
+              plan.qrAsset,
+              width: 240,
+              height: 240,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => const SizedBox(
+                width: 240,
+                height: 240,
+                child: Center(child: Text('QR no disponible')),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppEspaciado.m),
         Container(
           padding: const EdgeInsets.all(AppEspaciado.m),
           decoration: BoxDecoration(
@@ -176,7 +212,7 @@ class _LicenciaScreenState extends ConsumerState<LicenciaScreen> {
                   ),
                   const SizedBox(width: AppEspaciado.s),
                   const Text(
-                    'Consignación a Bancolombia',
+                    'Consignación a Bancolombia (referencia)',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -318,11 +354,14 @@ class _LicenciaScreenState extends ConsumerState<LicenciaScreen> {
 }
 
 class _PlanLicencia {
-  const _PlanLicencia(this.nombre, this.dias, this.valor);
+  const _PlanLicencia(this.nombre, this.dias, this.valor, this.qrAsset);
 
   final String nombre;
   final int dias;
   final int valor;
+
+  /// Ruta del código QR de pago (Bancolombia) para este plan.
+  final String qrAsset;
 }
 
 class _CardSeccion extends StatelessWidget {

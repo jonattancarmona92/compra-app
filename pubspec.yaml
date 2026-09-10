@@ -105,6 +105,12 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Códigos QR de pago por plan (adquisición de licencia por
+  # consignación a Bancolombia). El nombre del archivo coincide con el
+  # valor del plan: 30.jpg, 150.jpg y 240.jpg.
+  assets:
+    - assets/qr/
+
 # ================= ICONOS DE LA APLICACION =================
 # Genera los iconos de lanzador (Android/iOS) a partir de la taza de
 # cafe disenada para Coffee Control.
