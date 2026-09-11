@@ -51,6 +51,7 @@ import 'package:compra/features/configuraciones/actualizaciones_screen.dart';
 import 'package:compra/features/configuraciones/licencia_provider.dart';
 import 'package:compra/features/configuraciones/licencia_screen.dart';
 import 'package:compra/features/configuraciones/soporte_screen.dart';
+import 'package:compra/features/configuraciones/update_service.dart';
 import 'package:compra/features/inicio/licencia_bloqueo_screen.dart';
 
 // ============================================================================
@@ -1123,8 +1124,33 @@ class _SubmenuView extends StatelessWidget {
 // PIE DEL DASHBOARD
 // ============================================================================
 
-class _DashboardFooter extends StatelessWidget {
+class _DashboardFooter extends StatefulWidget {
   const _DashboardFooter();
+
+  @override
+  State<_DashboardFooter> createState() => _DashboardFooterState();
+}
+
+class _DashboardFooterState extends State<_DashboardFooter> {
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarVersion();
+  }
+
+  /// Muestra la versión instalada (PackageInfo, viene de pubspec) en el
+  /// pie del Dashboard, p. ej. "Coffee Control v1.3.3".
+  Future<void> _cargarVersion() async {
+    String version = '';
+    try {
+      version = await UpdateService().versionInstaladaNombre();
+    } catch (_) {
+      // La versión queda oculta si el plugin no está disponible.
+    }
+    if (mounted) setState(() => _version = version);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1134,7 +1160,7 @@ class _DashboardFooter extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.only(top: AppEspaciado.l),
         child: Text(
-          'Coffee Control v3.0',
+          _version.isEmpty ? 'Coffee Control' : 'Coffee Control v$_version',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.outlineVariant,
           ),
