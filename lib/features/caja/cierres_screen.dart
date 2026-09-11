@@ -224,7 +224,7 @@ class _CierresScreenState extends ConsumerState<CierresScreen> {
           .read(cajaProvider.notifier)
           .cerrarCaja(operador: _operadorActual);
       if (mounted) {
-        Notificaciones.exito(context, 'Caja cerrada correctamente.');
+        await _mostrarExitoCierreCaja(efectivoContado: _efectivoContado!);
       }
     } on CajaNoAbiertaException {
       if (mounted) {
@@ -236,6 +236,278 @@ class _CierresScreenState extends ConsumerState<CierresScreen> {
       }
     } finally {
       if (mounted) setState(() => _cerrandoCaja = false);
+    }
+  }
+
+  // ==========================================================================
+  // RECIBO DEL CIERRE DE CAJA (§3.3.4) — solo movimientos de ESTA caja
+  // ==========================================================================
+
+  /// Diálogo de éxito del Cierre de Caja con la opción de imprimir el
+  /// recibo: historial de entradas/salidas, estado de caja y café
+  /// comprado/vendido/pendiente de liquidar de esta caja.
+  Future<void> _mostrarExitoCierreCaja({required double efectivoContado}) async {
+    final estado = ref.read(cajaProvider);
+    final diferencia = efectivoContado - estado.saldoActual;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.check_circle,
+          color: AppPaletaOficial.verde,
+          size: 40,
+        ),
+        title: const Text('Caja Cerrada'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Saldo teórico final: '
+                '${CurrencyFormatter.formatValue(estado.saldoActual)}',
+              ),
+              const SizedBox(height: AppEspaciado.s),
+              Text(
+                'Efectivo contado: '
+                '${CurrencyFormatter.formatValue(efectivoContado)}',
+              ),
+              const SizedBox(height: AppEspaciado.s),
+              Text(
+                'Diferencia: ${CurrencyFormatter.formatValue(diferencia)}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: AppEspaciado.s),
+              Text(
+                'El recibo incluye: entradas, salidas, estado de caja y '
+                'el café comprado/vendido/pendiente de liquidar de esta caja.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _imprimirReciboCierreCaja(efectivoContado: efectivoContado);
+            },
+            icon: const Icon(Icons.print_outlined, size: 18),
+            label: const Text('Imprimir Recibo'),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _compartirReciboCierreCaja(efectivoContado: efectivoContado);
+            },
+            icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+            label: const Text('Compartir PDF'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Salir'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Construye las líneas del recibo de cierre: estado de caja,
+  /// historial de entradas y salidas (de esta sesión) y café
+  /// comprado/vendido/pendiente de liquidar registrado entre la
+  /// apertura y el cierre de esta caja (§3.3.4 — solo de esta caja).
+  List<LineaComprobante> _lineasReciboCierreCaja({
+    required double efectivoContado,
+  }) {
+    final estado = ref.read(cajaProvider);
+    final sesion = estado.sesionActual;
+    final saldoInicial = sesion?.saldoInicial ?? 0;
+    final apertura =
+        sesion?.fechaApertura ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final cierre = sesion?.fechaCierre ?? DateTime.now();
+    final diferencia = efectivoContado - estado.saldoActual;
+
+    final entradas = estado.movimientosVisibles
+        .where((m) => m.tipo == TipoMovimientoCaja.entrada)
+        .toList();
+    final salidas = estado.movimientosVisibles
+        .where((m) => m.tipo == TipoMovimientoCaja.salida)
+        .toList();
+
+    // Solo transacciones de café realizadas dentro de ESTA caja.
+    final transaccionesCaja = ref
+        .read(procesosProvider)
+        .transacciones
+        .where(
+          (t) =>
+              !t.anulado &&
+              !t.fechaRegistro.isBefore(apertura) &&
+              !t.fechaRegistro.isAfter(cierre),
+        )
+        .toList();
+    final compras = transaccionesCaja.where((t) => t.esCompra).toList();
+    final ventas = transaccionesCaja.where((t) => !t.esCompra).toList();
+    final pendientes = transaccionesCaja
+        .where((t) => t.estadoPago == EstadoPagoProceso.pendiente)
+        .toList();
+
+    final lineas = <LineaComprobante>[
+      LineaComprobante.texto('CIERRE DE CAJA'),
+      LineaComprobante.campo('Fecha de cierre', _formatearFecha(cierre)),
+      const LineaComprobante.separador(),
+      const LineaComprobante.texto('ESTADO DE CAJA'),
+      LineaComprobante.campo(
+        'Saldo inicial',
+        CurrencyFormatter.formatValue(saldoInicial),
+      ),
+      LineaComprobante.campo(
+        'Total entradas',
+        CurrencyFormatter.formatValue(estado.totalEntradas),
+      ),
+      LineaComprobante.campo(
+        'Total salidas',
+        CurrencyFormatter.formatValue(estado.totalSalidas),
+      ),
+      LineaComprobante.campo(
+        'Saldo teórico final',
+        CurrencyFormatter.formatValue(estado.saldoActual),
+        enNegrita: true,
+      ),
+      LineaComprobante.campo(
+        'Efectivo contado',
+        CurrencyFormatter.formatValue(efectivoContado),
+      ),
+      LineaComprobante.campo(
+        'Diferencia',
+        CurrencyFormatter.formatValue(diferencia),
+      ),
+      const LineaComprobante.separador(),
+      const LineaComprobante.texto('ENTRADAS'),
+    ];
+    if (entradas.isEmpty) {
+      lineas.add(const LineaComprobante.texto('Sin entradas en esta caja.'));
+    } else {
+      for (final m in entradas) {
+        lineas.add(
+          LineaComprobante.campo(
+            m.concepto,
+            CurrencyFormatter.formatValue(m.monto),
+          ),
+        );
+      }
+    }
+
+    lineas.add(const LineaComprobante.separador());
+    lineas.add(const LineaComprobante.texto('SALIDAS'));
+    if (salidas.isEmpty) {
+      lineas.add(const LineaComprobante.texto('Sin salidas en esta caja.'));
+    } else {
+      for (final m in salidas) {
+        lineas.add(
+          LineaComprobante.campo(
+            m.concepto,
+            CurrencyFormatter.formatValue(m.monto),
+          ),
+        );
+      }
+    }
+
+    lineas.add(const LineaComprobante.separador());
+    lineas.add(const LineaComprobante.texto('CAFÉ COMPRADO'));
+    if (compras.isEmpty) {
+      lineas.add(const LineaComprobante.texto('Sin compras en esta caja.'));
+    } else {
+      for (final t in compras) {
+        lineas.add(
+          LineaComprobante.campo(
+            '${t.nombreCliente} — ${t.tipoCafe.etiqueta}',
+            '${_formatearCantidad(t.pesoNeto)} kg · '
+            '${CurrencyFormatter.formatValue(t.valorTotal)}',
+          ),
+        );
+      }
+    }
+
+    lineas.add(const LineaComprobante.separador());
+    lineas.add(const LineaComprobante.texto('CAFÉ VENDIDO'));
+    if (ventas.isEmpty) {
+      lineas.add(const LineaComprobante.texto('Sin ventas en esta caja.'));
+    } else {
+      for (final t in ventas) {
+        lineas.add(
+          LineaComprobante.campo(
+            '${t.nombreCliente} — ${t.tipoCafe.etiqueta}',
+            '${_formatearCantidad(t.pesoNeto)} kg · '
+            '${CurrencyFormatter.formatValue(t.valorTotal)}',
+          ),
+        );
+      }
+    }
+
+    lineas.add(const LineaComprobante.separador());
+    lineas.add(const LineaComprobante.texto('PENDIENTE DE LIQUIDAR'));
+    if (pendientes.isEmpty) {
+      lineas.add(
+        const LineaComprobante.texto('Sin saldos pendientes en esta caja.'),
+      );
+    } else {
+      for (final t in pendientes) {
+        lineas.add(
+          LineaComprobante.campo(
+            '${t.esCompra ? 'Compra' : 'Venta'} — ${t.nombreCliente} — '
+            '${t.tipoCafe.etiqueta}',
+            CurrencyFormatter.formatValue(t.saldoPendiente),
+          ),
+        );
+      }
+    }
+    return lineas;
+  }
+
+  Future<void> _imprimirReciboCierreCaja({
+    required double efectivoContado,
+  }) async {
+    final config = ref.read(configuracionesProvider);
+    final datos = TicketEscPosBuilder.construir(
+      titulo: 'RECIBO CIERRE DE CAJA',
+      lineas: [
+        for (final l in _lineasReciboCierreCaja(efectivoContado: efectivoContado))
+          if (l.valor == null) l.etiqueta else '${l.etiqueta}: ${l.valor}',
+      ],
+      encabezado: config.factura.aEncabezadoComprobante,
+      copias: config.impresora.copias,
+      cortarPapel: config.impresora.cortarPapel,
+    );
+    try {
+      await ImpresoraBluetoothServicio.instancia.escribir(datos);
+    } catch (_) {
+      if (!mounted) return;
+      Notificaciones.error(
+        context,
+        'No se pudo imprimir. Verifica la conexión con la impresora.',
+      );
+    }
+  }
+
+  Future<void> _compartirReciboCierreCaja({
+    required double efectivoContado,
+  }) async {
+    final config = ref.read(configuracionesProvider);
+    final ok = await ComprobanteServicio.instancia.compartirPdf(
+      encabezado: config.factura.aEncabezadoComprobante,
+      titulo: 'Recibo de Cierre de Caja',
+      lineas: _lineasReciboCierreCaja(efectivoContado: efectivoContado),
+    );
+    if (!mounted) return;
+    if (!ok) {
+      Notificaciones.error(
+        context,
+        'No fue posible generar o compartir el PDF del recibo.',
+      );
     }
   }
 

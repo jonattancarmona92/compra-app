@@ -133,36 +133,47 @@ class _HistorialDeMovimientosScreenState
             AppEspaciado.m,
             AppEspaciado.m,
           ),
-          child: Row(
+          child: Column(
             children: [
-              Expanded(
-                child: _TarjetaResumen(
-                  etiqueta: 'Entrada por Apertura',
-                  valor: apertura,
-                  icon: Icons.login,
-                  colorIcono: AppPaletaOficial.cafe,
-                  colorValor: AppPaletaOficial.cafe,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: _TarjetaResumen(
+                      etiqueta: 'Entrada por Apertura',
+                      valor: apertura,
+                      icon: Icons.login,
+                      colorIcono: AppPaletaOficial.cafe,
+                      colorValor: AppPaletaOficial.cafe,
+                    ),
+                  ),
+                  const SizedBox(width: AppEspaciado.s),
+                  Expanded(
+                    child: _TarjetaResumen(
+                      etiqueta: 'Total Entradas',
+                      valor: estado.totalEntradas,
+                      icon: Icons.arrow_downward,
+                      colorIcono: AppPaletaOficial.verde,
+                      colorValor: AppPaletaOficial.verde,
+                    ),
+                  ),
+                  const SizedBox(width: AppEspaciado.s),
+                  Expanded(
+                    child: _TarjetaResumen(
+                      etiqueta: 'Total Salidas',
+                      valor: estado.totalSalidas,
+                      icon: Icons.arrow_upward,
+                      colorIcono: AppPaletaOficial.rojo,
+                      colorValor: AppPaletaOficial.rojo,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: AppEspaciado.s),
-              Expanded(
-                child: _TarjetaResumen(
-                  etiqueta: 'Total Entradas',
-                  valor: estado.totalEntradas,
-                  icon: Icons.arrow_downward,
-                  colorIcono: AppPaletaOficial.verde,
-                  colorValor: AppPaletaOficial.verde,
-                ),
-              ),
-              const SizedBox(width: AppEspaciado.s),
-              Expanded(
-                child: _TarjetaResumen(
-                  etiqueta: 'Total Salidas',
-                  valor: estado.totalSalidas,
-                  icon: Icons.arrow_upward,
-                  colorIcono: AppPaletaOficial.rojo,
-                  colorValor: AppPaletaOficial.rojo,
-                ),
+              const SizedBox(height: AppEspaciado.m),
+              _EquilibrioCaja(
+                apertura: apertura,
+                entradas: estado.totalEntradas,
+                salidas: estado.totalSalidas,
+                saldo: estado.saldoActual,
               ),
             ],
           ),
@@ -722,6 +733,97 @@ class _TarjetaResumen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// §3.3.3 — Ecuación de Consistencia del Balance (§7.9.1) expuesta en la
+/// pestaña Resumen: Saldo Inicial + Entradas − Salidas = Saldo actual.
+class _EquilibrioCaja extends StatelessWidget {
+  final double apertura;
+  final double entradas;
+  final double salidas;
+  final double saldo;
+
+  const _EquilibrioCaja({
+    required this.apertura,
+    required this.entradas,
+    required this.salidas,
+    required this.saldo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppEspaciado.m),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _fila(
+            context,
+            'Saldo Inicial',
+            apertura,
+            AppPaletaOficial.cafe,
+          ),
+          _fila(
+            context,
+            '+ Entradas',
+            entradas,
+            AppPaletaOficial.verde,
+          ),
+          _fila(
+            context,
+            '− Salidas',
+            salidas,
+            AppPaletaOficial.rojo,
+          ),
+          const Divider(height: AppEspaciado.m),
+          _fila(
+            context,
+            '= Saldo actual',
+            saldo,
+            AppPaletaOficial.cafe,
+            negrita: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fila(
+    BuildContext context,
+    String label,
+    double valor,
+    Color color, {
+    bool negrita = false,
+  }) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppEspaciado.xs),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: negrita ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            CurrencyFormatter.formatValue(valor),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
