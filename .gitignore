@@ -47,5 +47,9 @@ app.*.map.json
 /packages/*/android/build/
 /packages/*/android/.gradle/
 
+# Firmado de release (Upload Key / Keystore): NO versionar credenciales
+/android/key.properties
+/android/app/key.jks
+
 # APK publicado (artefacto de build, se sube a GitHub Releases)
 # (los releases pueden incluir binarios vía GitHub Releases)
