@@ -12,6 +12,7 @@ import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Estado de la versión publicada en GitHub Releases.
 class InfoActualizacion {
@@ -52,8 +53,38 @@ class UpdateService {
   static const String githubApiUrl =
       'https://api.github.com/repos/$repoGitHub/releases/latest';
   static const String apkAssetNombre = 'Coffe.Control.apk';
+  static const String _claveUltimaVerificacion =
+      'ultima_verificacion_actualizacion';
 
   final OtaUpdate _ota = OtaUpdate();
+
+  /// Verifica la última actualización SOLO UNA VEZ al día (por dispositivo).
+  /// Devuelve la [InfoActualizacion] si hay una versión nueva, o `null` si
+  /// ya se verificó hoy, no hay novedades o no se pudo consultar GitHub.
+  Future<InfoActualizacion?> verificarUnaVezAlDia() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hoy = DateTime.now();
+    final claveHoy = '${hoy.year}-'
+        '${hoy.month.toString().padLeft(2, '0')}-'
+        '${hoy.day.toString().padLeft(2, '0')}';
+
+    final ultimo = prefs.getString(_claveUltimaVerificacion);
+    if (ultimo == claveHoy) return null;
+
+    // Se marca la fecha ANTES del chequeo: aunque falle la red, no se
+    // vuelve a intentar hoy (regla "verificar una vez cada día").
+    await prefs.setString(_claveUltimaVerificacion, claveHoy);
+
+    try {
+      final info = await obtenerDisponibleGitHub();
+      final nombreInstalado = await versionInstaladaNombre();
+      final esNueva = info.apkUrl.trim().isNotEmpty &&
+          compararVersiones(nombreInstalado, info.versionNombre) < 0;
+      return esNueva ? info : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Compara dos versiones semánticas ("1.2.3" vs "v1.20.0").
   /// Devuelve < 0 si a < b, 0 si son iguales y > 0 si a > b.

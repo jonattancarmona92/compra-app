@@ -29,6 +29,14 @@ class ImpresoraBluetoothServicio {
 
   bool get estaConectado => BluetoothPrintPlus.isConnected;
 
+  /// Consulta el estado REAL del socket SPP en el lado nativo. A diferencia
+  /// de [estaConectado] (que depende de que el evento `connected` haya
+  /// llegado al stream), enciende `true` si el puerto ya está abierto, aunque
+  /// ese evento se haya perdido por arranque o recreación de la actividad.
+  Future<bool> estaConectadoReal() async {
+    return BluetoothPrintPlus.estaConectadoReal();
+  }
+
   /// Consulta el estado actual del adaptador Bluetooth. Retorna `true` si
   /// está encendido.
   Future<bool> consultarEstadoBluetooth() async {
@@ -276,7 +284,7 @@ class ImpresoraBluetoothServicio {
       linea('**** PRUEBA ****');
       buffer.add(const [0x1D, 0x21, 0x00]);
       linea('');
-      linea(razonSocial.isEmpty ? 'COFFEE CONTROL' : razonSocial);
+      linea(razonSocial);
       linea('');
       buffer.add(const [0x1B, 0x61, 0x00]);
       linea('Impresion de prueba');

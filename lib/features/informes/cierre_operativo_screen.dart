@@ -14,8 +14,19 @@ class CierreOperativoScreen extends ConsumerWidget {
 
   const CierreOperativoScreen({super.key, required this.onBack});
 
-  String _tipoCartera(TipoCartera tipo) =>
-      tipo == TipoCartera.prestamo ? 'Préstamo' : 'Abono';
+String _tipoCartera(TipoCartera tipo) => switch (tipo) {
+      TipoCartera.prestamo => 'Préstamo',
+      TipoCartera.abono => 'Abono',
+      TipoCartera.saldoFavor => 'Ingreso (saldo a favor)',
+      TipoCartera.aplicacionSaldoFavor => 'Saldo a favor aplicado',
+    };
+
+  bool _esEntradaCartera(TipoCartera tipo) => switch (tipo) {
+        TipoCartera.abono => true,
+        TipoCartera.saldoFavor => true,
+        TipoCartera.prestamo => false,
+        TipoCartera.aplicacionSaldoFavor => false,
+      };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -64,12 +75,12 @@ class CierreOperativoScreen extends ConsumerWidget {
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(
-                        m.tipo == TipoCartera.prestamo
-                            ? Icons.arrow_upward
-                            : Icons.arrow_downward,
-                        color: m.tipo == TipoCartera.prestamo
-                            ? AppPaletaOficial.rojo
-                            : AppPaletaOficial.verde,
+                        _esEntradaCartera(m.tipo)
+                            ? Icons.arrow_downward
+                            : Icons.arrow_upward,
+                        color: _esEntradaCartera(m.tipo)
+                            ? AppPaletaOficial.verde
+                            : AppPaletaOficial.rojo,
                       ),
                       title: Text(
                         m.nombreCliente,
@@ -87,9 +98,9 @@ class CierreOperativoScreen extends ConsumerWidget {
                         CurrencyFormatter.formatValue(m.monto),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: m.tipo == TipoCartera.prestamo
-                              ? AppPaletaOficial.rojo
-                              : AppPaletaOficial.verde,
+                          color: _esEntradaCartera(m.tipo)
+                              ? AppPaletaOficial.verde
+                              : AppPaletaOficial.rojo,
                         ),
                       ),
                     );

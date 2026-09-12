@@ -36,6 +36,20 @@ gradle.beforeProject {
     }
 }
 
+// Algunos plugins (secured_storage, flutter_bluetooth_serial, printing, etc.)
+// aún compilan con Java 8, obsoleto en JDK 17+. Se fuerza Java 17 en el
+// compileOptions de cada módulo Android para eliminar los warnings
+// `source/target value 8 is obsolete` sin tocar el pub-cache.
+gradle.beforeProject {
+    afterEvaluate {
+        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)
+            ?.compileOptions?.let { options ->
+                options.sourceCompatibility = org.gradle.api.JavaVersion.VERSION_17
+                options.targetCompatibility = org.gradle.api.JavaVersion.VERSION_17
+            }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

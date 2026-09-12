@@ -20,6 +20,10 @@ class ClienteModel {
   /// Saldo neto de deuda del cliente (el cliente debe al negocio).
   final double saldoDeuda;
 
+  /// Saldo a favor del cliente (crédito acumulado por ingresos de
+  /// efectivo a su favor, no aplicados aún a liquidaciones).
+  final double saldoFavor;
+
   /// Indica si el cliente tiene anticipos o ventas pendientes por
   /// amortizar (relevante para el flujo de Abonos §3.3.2).
   final bool tieneAnticipos;
@@ -34,6 +38,7 @@ class ClienteModel {
     this.cupoMaximo = 0,
     this.activo = true,
     this.saldoDeuda = 0,
+    this.saldoFavor = 0,
     this.tieneAnticipos = false,
   });
 
@@ -64,6 +69,7 @@ class ClienteModel {
     double? cupoMaximo,
     bool? activo,
     double? saldoDeuda,
+    double? saldoFavor,
     bool? tieneAnticipos,
   }) {
     return ClienteModel(
@@ -76,6 +82,7 @@ class ClienteModel {
       cupoMaximo: cupoMaximo ?? this.cupoMaximo,
       activo: activo ?? this.activo,
       saldoDeuda: saldoDeuda ?? this.saldoDeuda,
+      saldoFavor: saldoFavor ?? this.saldoFavor,
       tieneAnticipos: tieneAnticipos ?? this.tieneAnticipos,
     );
   }

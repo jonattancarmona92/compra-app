@@ -48,6 +48,8 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
   bool _pendientePago = false;
   bool _factorManual = false;
   bool _sincronizandoFactor = false;
+  bool _pesoFinalMojadoManual = false;
+  bool _sincronizandoPesoFinal = false;
   double _pesoNeto = 0.0;
   double _precioKg = 0.0;
   double _valorTotal = 0.0;
@@ -61,7 +63,7 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
     super.initState();
     _pesoBrutoController.addListener(_actualizarCalculos);
     _descuentoHumedadKgController.addListener(_actualizarCalculos);
-    _pesoFinalMojadoController.addListener(_actualizarCalculos);
+    _pesoFinalMojadoController.addListener(_onPesoFinalMojadoEditado);
     _pesoController.addListener(_actualizarCalculos);
     _precioCargaController.addListener(_actualizarCalculos);
     _grameraController.addListener(_onGrameraEditada);
@@ -89,6 +91,12 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
   void _onFactorEditado() {
     if (_sincronizandoFactor) return;
     _factorManual = true;
+    _actualizarCalculos();
+  }
+
+  void _onPesoFinalMojadoEditado() {
+    if (_sincronizandoPesoFinal) return;
+    _pesoFinalMojadoManual = true;
     _actualizarCalculos();
   }
 
@@ -126,18 +134,29 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
       if (_tipoCafe == 'Mojado') {
         // §7.2 — el operador ingresa el descuento por humedad como
         // PORCENTAJE sobre el peso bruto. La merma en kg se calcula
-        // automáticamente (8% de 100 kg = 8 kg). El "Peso final" sigue
-        // siendo editable: corrige el peso YA descontado (peso real
-        // registrado en la báscula) y tiene prioridad sobre el cálculo.
+        // automáticamente (8% de 100 kg = 8 kg) y se carga en el campo
+        // editable. Si el operador la ajusta a mano, se respeta ese
+        // valor; si no, se mantiene el cálculo.
         final pesoBruto = double.tryParse(_pesoBrutoController.text) ?? 0.0;
         final descuentoPct =
             double.tryParse(_descuentoHumedadKgController.text) ?? 0.0;
         final descuentoKg = pesoBruto * (descuentoPct.clamp(0, 100) / 100);
+
+        if (!_pesoFinalMojadoManual) {
+          final nuevoTexto = _formatearMerma(descuentoKg);
+          if (_pesoFinalMojadoController.text != nuevoTexto) {
+            _sincronizandoPesoFinal = true;
+            _pesoFinalMojadoController.text = nuevoTexto;
+            _sincronizandoPesoFinal = false;
+          }
+        }
+
         final pesoFinalEditado =
             double.tryParse(_pesoFinalMojadoController.text) ?? 0.0;
-        _pesoNeto = pesoFinalEditado > 0
+        final mermaAplicada = pesoFinalEditado > 0
             ? pesoFinalEditado
-            : pesoBruto - descuentoKg;
+            : descuentoKg;
+        _pesoNeto = pesoBruto - mermaAplicada;
         if (_pesoNeto < 0) _pesoNeto = 0.0;
 
         _precioKg = precioCarga / 125;
@@ -197,12 +216,23 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
     return double.tryParse(numericString) ?? 0.0;
   }
 
+  /// Formatea la merma en kg sin ceros decimales sobrantes (1.6, 8, 10).
+  String _formatearMerma(double v) {
+    if (v == v.roundToDouble()) return v.toStringAsFixed(0);
+    final s = v.toStringAsFixed(2);
+    return s.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
   /// §7.2 — merma en kg del café mojado = peso bruto × porcentaje de
-  /// descuento por humedad ÷ 100 (ej. 8% de 100 kg = 8 kg).
+  /// descuento por humedad ÷ 100 (ej. 8% de 100 kg = 8 kg). Si el
+  /// operador editó el campo a mano, se respeta ese valor.
   double get _descuentoHumedadKgCalculado {
     final pesoBruto = double.tryParse(_pesoBrutoController.text) ?? 0.0;
     final pct = double.tryParse(_descuentoHumedadKgController.text) ?? 0.0;
-    return pesoBruto * (pct.clamp(0, 100)) / 100;
+    final calculado = pesoBruto * (pct.clamp(0, 100)) / 100;
+    final editado =
+        double.tryParse(_pesoFinalMojadoController.text) ?? 0.0;
+    return editado > 0 ? editado : calculado;
   }
 
   bool _validarFormulario() {
@@ -246,7 +276,7 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
       if (pesoFinalMojado != null && pesoFinalMojado > pesoBruto) {
         Notificaciones.error(
           context,
-          'El peso final no puede ser mayor que el peso bruto.',
+          'La merma no puede ser mayor que el peso bruto.',
         );
         return false;
       }
@@ -753,7 +783,9 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
     _filtroCliente = '';
     _pesoBrutoController.clear();
     _descuentoHumedadKgController.clear();
+    _sincronizandoPesoFinal = true;
     _pesoFinalMojadoController.clear();
+    _sincronizandoPesoFinal = false;
     _pesoController.clear();
     _precioCargaController.clear();
     _grameraController.clear();
@@ -766,6 +798,7 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
       _ajusteManualTotal = false;
       _pendientePago = false;
       _factorManual = false;
+      _pesoFinalMojadoManual = false;
       _origenLoteAlmacenado = false;
       _loteVentaId = null;
       _pesoNeto = 0.0;
@@ -1133,6 +1166,7 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
                 _factorController.clear();
                 _descuentoEmpaqueKgController.clear();
                 _factorManual = false;
+                _pesoFinalMojadoManual = false;
               });
             }
           },
@@ -1172,8 +1206,9 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: 'Descuento por Humedad (%)',
-                  helperText: 'Porcentaje de merma sobre el peso bruto. '
-                      'Ej: 8% de 100 kg = 8 kg de merma.',
+                  helperText: 'Ingrese un PORCENTAJE, no kilogramos. '
+                      'La merma en kg se calcula automáticamente: '
+                      'Peso Bruto × % ÷ 100 (ej: 8% de 100 kg = 8 kg).',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppEspaciado.radioLg),
                   ),
@@ -1184,10 +1219,10 @@ class _TransaccionesScreenState extends ConsumerState<TransaccionesScreen> {
                 controller: _pesoFinalMojadoController,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: 'Peso Final (kg) — editable',
-                  helperText: 'Se calcula Peso Bruto − Merma. Edítelo '
-                      'solo para corregir el peso YA descontado si la '
-                      'báscula arroja otro valor.',
+                  labelText: 'Merma (kg) — editable',
+                  helperText: 'Se carga automáticamente: Peso Bruto × % ÷ 100 '
+                      '(ej: 20 kg × 8% = 1.6 kg). '
+                      'El Peso Final se calcula como Peso Bruto − Merma.',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppEspaciado.radioLg),
                   ),

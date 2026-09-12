@@ -38,6 +38,7 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
   Timer? _vigiaEscaneo;
   Timer? _vigiaConexion;
   BluetoothDevice? _dispositivoEnConexion;
+  int _pasosSonda = 0;
 
   /// Reintentos automáticos de conexión: en Xiaomi/MIUI el primer intento
   /// de socket SPP suele caerse (el adaptador se apaga/enciende solo);
@@ -90,6 +91,19 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
     _servicio.consultarEstadoBluetooth().then((activo) {
       if (!mounted) return;
       setState(() => _bluetoothActivo = activo);
+    });
+    // El socket real es la fuente veraz: si ya hay un puerto abierto (la
+    // impresora quedó conectada a nivel de sistema), la app muestra
+    // "En línea" aunque el evento `connected` se haya perdido al arrancar.
+    _servicio.estaConectadoReal().then((conectado) {
+      if (!mounted || !conectado) return;
+      setState(() => _estadoConexion = ConnectState.connected);
+      final impresora = ref.read(configuracionesProvider).impresora;
+      if (impresora.direccionBluetooth.isNotEmpty && !impresora.enlinea) {
+        ref
+            .read(configuracionesProvider.notifier)
+            .guardarImpresora(impresora.copyWith(enlinea: true));
+      }
     });
     _cargarVinculados();
     // Si ya se guardó una impresora en una sesión anterior, se intenta
@@ -224,16 +238,10 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
   ) async {
     _desconexionManual = false;
     _falloEnProceso = false;
+    _pasosSonda = 0;
     if (!mounted) return;
     setState(() => _conectando = true);
-    // Vigía: si el socket cuelga (habitual en Xiaomi/MIUI), se considera un
-    // fallo y se reencauza por [_decidirTrasFallo] en vez de dejarlo trabado.
-    _vigiaConexion?.cancel();
-    _vigiaConexion = Timer(const Duration(seconds: 20), () {
-      if (!mounted || !_conectando || _falloEnProceso) return;
-      setState(() => _conectando = false);
-      _decidirTrasFallo(dispositivo, impresora);
-    });
+    _iniciarSondaConexion(dispositivo, impresora);
     final inicioOk = await _servicio.conectar(dispositivo);
     if (!mounted) return;
     if (!inicioOk) {
@@ -253,6 +261,48 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
             enlinea: true,
           ),
         );
+  }
+
+  /// Vigía + sonda del socket real. El plugin avisa "conectado" con un
+  /// evento que en algunos equipos no llega a la app (canal de estado sin
+  /// suscriptores o firmware que no emite `onSuccess`). Para no depender de
+  /// ese evento, se pregunta al lado nativo cada medio segundo si el puerto
+  /// SPP está abierto: si lo está, la impresora está operativa. Si el socket
+  /// cuelga (habitual en Xiaomi/MIUI), el fin del conteo se reencauza por
+  /// [_decidirTrasFallo] en vez de dejarlo trabado en "Conectando...".
+  void _iniciarSondaConexion(
+    BluetoothDevice dispositivo,
+    ConfigImpresora impresora,
+  ) {
+    _vigiaConexion?.cancel();
+    _vigiaConexion = Timer.periodic(const Duration(milliseconds: 500), (
+      timer,
+    ) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final conectado = await _servicio.estaConectadoReal();
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (conectado) {
+        timer.cancel();
+        if (_conectando) {
+          _alCambiarConexion(ConnectState.connected);
+        }
+        return;
+      }
+      _pasosSonda++;
+      // 40 pasos x 500 ms = 20 s, mismo límite que el antiguo vigía.
+      if (_pasosSonda >= 40) {
+        timer.cancel();
+        if (!mounted || !_conectando || _falloEnProceso) return;
+        setState(() => _conectando = false);
+        _decidirTrasFallo(dispositivo, impresora);
+      }
+    });
   }
 
   /// Decide tras un intento fallido: reintenta (el adaptador de los
@@ -339,6 +389,17 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
     if (impresora.direccionBluetooth.isEmpty || impresora.enlinea) return;
     if (!await _servicio.permisosBluetoothConcedidos()) return;
     if (!_bluetoothActivo) return;
+    // Si el socket ya está abierto a nivel nativo no se reconecta (eso
+    // cerraría y volvería a abrir el puerto): solo se refleja el estado real
+    // en la interfaz y se guarda la impresora como en línea.
+    if (await _servicio.estaConectadoReal()) {
+      if (!mounted) return;
+      setState(() => _estadoConexion = ConnectState.connected);
+      ref
+          .read(configuracionesProvider.notifier)
+          .guardarImpresora(impresora.copyWith(enlinea: true));
+      return;
+    }
     final dispositivo = BluetoothDevice(
       impresora.nombre.isEmpty
           ? impresora.direccionBluetooth
@@ -346,6 +407,23 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
       impresora.direccionBluetooth,
     );
     await _servicio.conectar(dispositivo);
+    // Tras conectar se sondea el socket real unos segundos: el evento
+    // `connected` puede no llegar a la app, pero si el puerto quedó abierto
+    // la impresora está lista y debe verse "En línea".
+    for (int i = 0; i < 10; i++) {
+      if (!mounted) return;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      if (await _servicio.estaConectadoReal()) {
+        if (!mounted) return;
+        setState(() => _estadoConexion = ConnectState.connected);
+        ref
+            .read(configuracionesProvider.notifier)
+            .guardarImpresora(
+              impresora.copyWith(enlinea: true),
+            );
+        return;
+      }
+    }
   }
 
   /// Carga los dispositivos ya vinculados con el teléfono. Si faltan
@@ -488,21 +566,6 @@ class _ImpresoraScreenState extends ConsumerState<ImpresoraScreen> {
                 },
               ),
             ],
-          ),
-          const Divider(),
-          SwitchListTile(
-            value: impresora.cortarPapel,
-            onChanged: (v) => ref
-                .read(configuracionesProvider.notifier)
-                .guardarImpresora(impresora.copyWith(cortarPapel: v)),
-            title: const Text('Cortar papel automáticamente'),
-          ),
-          SwitchListTile(
-            value: impresora.imprimirLogo,
-            onChanged: (v) => ref
-                .read(configuracionesProvider.notifier)
-                .guardarImpresora(impresora.copyWith(imprimirLogo: v)),
-            title: const Text('Imprimir logo'),
           ),
         ],
       ),

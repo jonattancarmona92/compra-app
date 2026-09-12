@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/diseno.dart';
+import '../caja/caja_provider.dart';
 import 'models/cliente_model.dart';
 import 'providers/cliente_provider.dart';
 
@@ -50,6 +51,9 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
       ),
       builder: (context) => _FichaCliente(
         cliente: cliente,
+        saldoFavor: ref
+            .read(cajaProvider.notifier)
+            .saldoFavorDisponible(cliente.id),
         onInactivar: () {
           ref
               .read(clienteProvider.notifier)
@@ -164,9 +168,14 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
 
 class _FichaCliente extends StatelessWidget {
   final ClienteModel cliente;
+  final double saldoFavor;
   final VoidCallback onInactivar;
 
-  const _FichaCliente({required this.cliente, required this.onInactivar});
+  const _FichaCliente({
+    required this.cliente,
+    required this.saldoFavor,
+    required this.onInactivar,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -208,6 +217,11 @@ class _FichaCliente extends StatelessWidget {
               ),
             const Divider(height: AppEspaciado.l),
             _fila('Deuda actual', cliente.saldoDeuda, destacado: true),
+            _fila(
+              'Saldo a favor',
+              saldoFavor,
+              positivo: saldoFavor > 0,
+            ),
             _fila(
               'Cupo máximo',
               cliente.cupoMaximoEfectivo,

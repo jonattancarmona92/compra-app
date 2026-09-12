@@ -192,14 +192,25 @@ public class BluetoothPrintPlusPlugin
         break;
       case "disconnect":
         Printer.close();
+        // El SDK G-Printer no notifica el cierre del socket: sin este evento
+        // la app quedaría para siempre en "Conectando..." tras pulsar
+        // Desconectar. Se emite aquí el estado real.
+        if (sink != null) sink.success(BPPState.DeviceDisconnected.getValue());
         result.success(null);
         break;
       case "write":
         byte[] bytes = call.argument("data");
         try {
-          result.success(write(bytes));
+          boolean enviado = write(bytes);
+          // Un envío exitoso al socket confirma que la impresora está
+          // operativa: re-sincroniza el estado en Dart incluso si el evento
+          // `connected` se emitió con el canal aún sin suscriptores.
+          if (enviado && sink != null) {
+            sink.success(BPPState.DeviceConnected.getValue());
+          }
+          result.success(enviado);
         } catch (IOException e) {
-          throw new RuntimeException(e);
+          result.error("write", e.getMessage(), null);
         }
         break;
       case "bondedDevices":
@@ -208,6 +219,9 @@ public class BluetoothPrintPlusPlugin
       case "setBluetoothEnabled":
         Boolean habilitar = call.argument("enable");
         setBluetoothEnabled(result, habilitar != null && habilitar);
+        break;
+      case "isPrinterConnected":
+        isPrinterConnected(result);
         break;
       case "openBluetoothSettings":
         openBluetoothSettings(result);
@@ -370,7 +384,21 @@ public class BluetoothPrintPlusPlugin
     }
   }
 
-  /// Abre los ajustes de Bluetooth del sistema (fallback cuando la app no
+  /// Estado real del socket SPP: `true` si el puerto está abierto en este
+  /// momento, independientemente de si el evento `connected` llegó a Dart
+  /// (puede perderse en el primer arranque o al recrearse la actividad).
+  /// Es la fuente veraz con la que la pantalla evita mostrar "Desconectada"
+  /// cuando la impresora ya está operativa.
+  private void isPrinterConnected(Result result) {
+    try {
+      PortManager pm = Printer.getPortManager();
+      result.success(pm != null && pm.getConnectStatus());
+    } catch (Exception e) {
+      result.error("isPrinterConnected", e.getMessage(), null);
+    }
+  }
+
+  /// Abre los ajustes Bluetooth del sistema (fallback cuando la app no
   /// puede encender/apagar el adaptador por sí misma).
   private void openBluetoothSettings(Result result) {
     try {
@@ -505,7 +533,7 @@ public class BluetoothPrintPlusPlugin
 
                     @Override
                     public void onSuccess(PrinterDevices printerDevices) {
-                      // LogUtils.d(TAG, "onSuccess");
+                      LogUtils.i(TAG, "onSuccess para " + mac);
                       if (sink != null) sink.success(BPPState.DeviceConnected.getValue());
                     }
 
@@ -520,12 +548,13 @@ public class BluetoothPrintPlusPlugin
 
                     @Override
                     public void onFailure() {
+                      LogUtils.e(TAG, "onFailure para " + mac);
                       if (sink != null) sink.success(BPPState.DeviceDisconnected.getValue());
                     }
 
                     @Override
                     public void onDisconnect() {
-                      // LogUtils.d(TAG, "onDisconnect");
+                      LogUtils.e(TAG, "onDisconnect para " + mac);
                       if (sink != null) sink.success(BPPState.DeviceDisconnected.getValue());
                     }
                   })
@@ -540,6 +569,18 @@ public class BluetoothPrintPlusPlugin
             LogUtils.e(TAG, "Printer.connect falló: " + t.toString());
             if (sink != null) sink.success(BPPState.DeviceDisconnected.getValue());
           }
+          // Verificación diferida del socket: algunos firmwares abren el
+          // puerto pero el SDK no llega a emitir `onSuccess` (o el evento se
+          // emite con el canal sin suscriptores). Si el puerto quedó abierto
+          // poco después, se confirma la conexión para que la app no se
+          // quede "Desconectada" con la impresora operativa.
+          new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            PortManager pm = Printer.getPortManager();
+            if (pm != null && pm.getConnectStatus() && sink != null) {
+              LogUtils.i(TAG, "socket abierto confirmado para " + mac);
+              sink.success(BPPState.DeviceConnected.getValue());
+            }
+          }, 2500);
         }
       }
     });

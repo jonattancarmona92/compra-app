@@ -9,6 +9,7 @@
 // el Módulo 5 se reemplaza la implementación interna por consultas
 // Drift reales sin cambiar la interfaz pública del Notifier, gracias
 // a la capa de repositorio abstracta definida abajo.
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -145,7 +146,19 @@ class CajaSesion {
 // ============================================================================
 
 /// Tipo de movimiento de cartera que agrega la pantalla §3.3.2.
-enum TipoCartera { prestamo, abono }
+enum TipoCartera {
+  prestamo,
+  abono,
+
+  /// Dinero recibido de un cliente a favor (saldo a favor / anticipo del
+  /// jefe, etc.). Es una ENTRADA asociada a un cliente que genera crédito
+  /// disponible para descontar en liquidaciones de ventas pendientes.
+  saldoFavor,
+
+  /// Consumo del saldo a favor aplicado a una liquidación de venta
+  /// pendiente (no mueve efectivo: el dinero ya ingresó como ENTRADA).
+  aplicacionSaldoFavor,
+}
 
 /// Detalle de un abono ya distribuido — espejo de §5.5.11
 /// (abonos_detalles): cada abono se distribuye automáticamente en la
@@ -316,10 +329,139 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
   CajaNotifier() : super(const CajaEstado());
 
   int _correlativoId = 1;
+  int _correlativoCartera = 1;
 
   static const _keySesionAbierta = 'caja_sesion_abierta';
   static const _keySesionAbiertaOperador = 'caja_sesion_abierta_operador';
   static const _keySesionAbiertaFecha = 'caja_sesion_abierta_fecha';
+
+  static const _keyEstado = 'caja_estado_json_v1';
+
+  /// Persiste el estado completo (sesión, movimientos y cartera) en
+  /// disco tras cada mutación, de modo que sobreviva al reinicio del
+  /// proceso (bloqueo del dispositivo, etc.).
+  @override
+  set state(CajaEstado value) {
+    super.state = value;
+    _persistirEstado();
+  }
+
+  Future<void> _persistirEstado() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyEstado, jsonEncode(_estadoAJson()));
+    } catch (_) {
+      // Entorno sin storage (tests o plugin ausente): se omite.
+    }
+  }
+
+  Map<String, dynamic> _estadoAJson() {
+    final s = state;
+    return {
+      'correlativoId': _correlativoId,
+      'correlativoCartera': _correlativoCartera,
+      'sesion': s.sesionActual == null
+          ? null
+          : {
+              'id': s.sesionActual!.id,
+              'cicloOperativoId': s.sesionActual!.cicloOperativoId,
+              'saldoInicial': s.sesionActual!.saldoInicial,
+              'estado': s.sesionActual!.estado.name,
+              'fechaApertura': s.sesionActual!.fechaApertura.toIso8601String(),
+              'abiertaPor': s.sesionActual!.abiertaPor,
+              'fechaCierre': s.sesionActual!.fechaCierre?.toIso8601String(),
+            },
+      'movimientos': s.movimientos.map(_movimientoAJson).toList(),
+      'cartera': s.movimientosCartera.map(_movimientoCarteraAJson).toList(),
+    };
+  }
+
+  Map<String, dynamic> _movimientoAJson(MovimientoCaja m) => {
+        'id': m.id,
+        'cajaId': m.cajaId,
+        'tipo': m.tipo.name,
+        'monto': m.monto,
+        'concepto': m.concepto,
+        'categoria': m.categoria?.name,
+        'origenTabla': m.origenTabla,
+        'origenId': m.origenId,
+        'fechaRegistro': m.fechaRegistro.toIso8601String(),
+        'anulado': m.anulado,
+        'operador': m.operador,
+      };
+
+  Map<String, dynamic> _movimientoCarteraAJson(MovimientoCartera m) => {
+        'id': m.id,
+        'clienteId': m.clienteId,
+        'nombreCliente': m.nombreCliente,
+        'tipo': m.tipo.name,
+        'monto': m.monto,
+        'concepto': m.concepto,
+        'distribucion': m.distribucion
+            ?.map((d) => {'concepto': d.concepto, 'monto': d.monto})
+            .toList(),
+        'fechaRegistro': m.fechaRegistro.toIso8601String(),
+        'anulado': m.anulado,
+        'operador': m.operador,
+      };
+
+  MovimientoCaja _movimientoDesdeJson(Map<String, dynamic> j) {
+    return MovimientoCaja(
+      id: (j['id'] as num).toInt(),
+      cajaId: (j['cajaId'] as num).toInt(),
+      tipo: TipoMovimientoCaja.values.byName(j['tipo'] as String),
+      monto: (j['monto'] as num).toDouble(),
+      concepto: j['concepto'] as String,
+      categoria: j['categoria'] == null
+          ? null
+          : CategoriaMovimiento.values.byName(j['categoria'] as String),
+      origenTabla: j['origenTabla'] as String?,
+      origenId: (j['origenId'] as num?)?.toInt(),
+      fechaRegistro: DateTime.parse(j['fechaRegistro'] as String),
+      anulado: j['anulado'] as bool? ?? false,
+      operador: j['operador'] as String,
+    );
+  }
+
+  MovimientoCartera _movimientoCarteraDesdeJson(Map<String, dynamic> j) {
+    return MovimientoCartera(
+      id: j['id'] as String,
+      clienteId: j['clienteId'] as String,
+      nombreCliente: j['nombreCliente'] as String,
+      tipo: TipoCartera.values.byName(j['tipo'] as String),
+      monto: (j['monto'] as num).toDouble(),
+      concepto: j['concepto'] as String,
+      distribucion: (j['distribucion'] as List?)
+          ?.map(
+            (d) => AbonoDetalle(
+              concepto: (d as Map<String, dynamic>)['concepto'] as String,
+              monto: ((d)['monto'] as num).toDouble(),
+            ),
+          )
+          .toList(),
+      fechaRegistro: DateTime.parse(j['fechaRegistro'] as String),
+      anulado: j['anulado'] as bool? ?? false,
+      operador: j['operador'] as String,
+    );
+  }
+
+  /// Restaura movimientos y cartera persistidos desde el storage. Se
+  /// invoca en [restaurarSesionGuardada], tras restaurar la sesión.
+  void _aplicarMovimientosPersistidos(Map<String, dynamic>? j) {
+    if (j == null) return;
+    final movimientos = (j['movimientos'] as List? ?? const [])
+        .map((e) => _movimientoDesdeJson(e as Map<String, dynamic>))
+        .toList();
+    final cartera = (j['cartera'] as List? ?? const [])
+        .map((e) => _movimientoCarteraDesdeJson(e as Map<String, dynamic>))
+        .toList();
+    _correlativoId = (j['correlativoId'] as num?)?.toInt() ?? 1;
+    _correlativoCartera = (j['correlativoCartera'] as num?)?.toInt() ?? 1;
+    state = state.copyWith(
+      movimientos: movimientos,
+      movimientosCartera: cartera,
+    );
+  }
 
   /// Restaura la sesión de Caja que quedó abierta al cerrar la app, si
   /// existe (§2.3). La persistencia real en el Módulo 5 (Drift) la
@@ -334,10 +476,18 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
     final saldoInicial = prefs.getDouble(_keySesionAbierta) ?? 0.0;
     final abiertaPor = prefs.getString(_keySesionAbiertaOperador) ?? '';
     final fecha = prefs.getString(_keySesionAbiertaFecha);
+    final persistido = prefs.getString(_keyEstado);
 
     if (abiertaPor.isEmpty) {
       state = state.copyWith(isCargando: false);
       return;
+    }
+
+    Map<String, dynamic>? json;
+    try {
+      json = persistido == null ? null : jsonDecode(persistido) as Map<String, dynamic>;
+    } catch (_) {
+      json = null;
     }
 
     state = state.copyWith(
@@ -351,7 +501,10 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
         abiertaPor: abiertaPor,
       ),
       movimientos: const [],
+      movimientosCartera: const [],
     );
+
+    _aplicarMovimientosPersistidos(json);
   }
 
   /// §2.2 — Abre una nueva sesión de Caja con el saldo inicial
@@ -633,8 +786,6 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
   // CARTERA — §3.3.2 (Préstamos y Abonos)
   // ==========================================================================
 
-  int _correlativoCartera = 1;
-
   /// Presta dinero de la Caja al cliente. Es una SALIDA de efectivo y
   /// exige cupo de crédito autorizado disponible en el cliente.
   /// Reglas aplicadas (§3.3.2):
@@ -685,7 +836,7 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
       operador: operador,
     );
 
-    final cajaMovimiento = await registrarMovimientoAutomatico(
+    await registrarMovimientoAutomatico(
       tipo: TipoMovimientoCaja.salida,
       monto: monto,
       concepto: 'Préstamo a ${prestamo.nombreCliente} — $concepto',
@@ -694,9 +845,10 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
       operador: operador,
     );
 
+    // El movimiento de Caja ya quedó registrado por
+    // [registrarMovimientoAutomatico]; aquí solo se suma la cartera.
     state = state.copyWith(
       movimientosCartera: [...state.movimientosCartera, prestamo],
-      movimientos: [...state.movimientos, cajaMovimiento],
     );
     return prestamo;
   }
@@ -734,20 +886,162 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
       operador: operador,
     );
 
-    final cajaMovimiento = await registrarMovimientoAutomatico(
+    final abonoId = _correlativoCartera - 1;
+    await registrarMovimientoAutomatico(
       tipo: TipoMovimientoCaja.entrada,
       monto: monto,
       concepto: 'Abono a cartera — ${abono.nombreCliente}',
       origenTabla: 'abonos',
+      origenId: abonoId,
+      operador: operador,
+    );
+
+    // El movimiento de Caja ya quedó registrado por
+    // [registrarMovimientoAutomatico]; aquí solo se suma la cartera.
+    state = state.copyWith(
+      movimientosCartera: [...state.movimientosCartera, abono],
+    );
+    return abono;
+  }
+
+  /// §3.3.2 — Registra dinero recibido de un cliente (p. ej. el jefe) como
+  /// ENTRADA a favor del cliente: genera crédito (saldo a favor) que se
+  /// descuenta en la liquidación de ventas pendientes a ese cliente.
+  /// Valida Caja abierta y valor positivo.
+  Future<MovimientoCartera> registrarIngresoCliente({
+    required String clienteId,
+    required String nombreCliente,
+    required double monto,
+    required String concepto,
+    required String operador,
+  }) async {
+    final sesion = state.sesionActual;
+    if (sesion == null || sesion.estado != EstadoCajaSesion.abierta) {
+      throw const CajaNoAbiertaException();
+    }
+    if (monto <= 0) {
+      throw const ValorInvalidoException('El valor debe ser mayor a cero.');
+    }
+    if (concepto.trim().isEmpty) {
+      throw const ValorInvalidoException('El concepto es obligatorio.');
+    }
+
+    final ingreso = MovimientoCartera(
+      id: 'car-${_correlativoCartera++}',
+      clienteId: clienteId,
+      nombreCliente: nombreCliente,
+      tipo: TipoCartera.saldoFavor,
+      monto: monto,
+      concepto: concepto.trim(),
+      fechaRegistro: DateTime.now(),
+      operador: operador,
+    );
+
+    // Es una ENTRADA de efectivo real a la Caja.
+    await registrarMovimientoAutomatico(
+      tipo: TipoMovimientoCaja.entrada,
+      monto: monto,
+      concepto: 'Ingreso de ${ingreso.nombreCliente} — ${ingreso.concepto}',
+      origenTabla: 'cartera_saldo_favor',
       origenId: _correlativoCartera - 1,
       operador: operador,
     );
 
+    // El movimiento de Caja ya quedó registrado por
+    // [registrarMovimientoAutomatico]; aquí solo se suma la cartera.
     state = state.copyWith(
-      movimientosCartera: [...state.movimientosCartera, abono],
-      movimientos: [...state.movimientos, cajaMovimiento],
+      movimientosCartera: [...state.movimientosCartera, ingreso],
     );
-    return abono;
+    return ingreso;
+  }
+
+  /// §3.3.2 — Describe el saldo a favor disponible de un cliente (crédito
+  /// acumulado por ingresos no consumidos aún).
+  double saldoFavorDisponible(String clienteId) {
+    var saldo = 0.0;
+    for (final m in state.movimientosCartera) {
+      if (m.clienteId != clienteId || m.anulado) continue;
+      if (m.tipo == TipoCartera.saldoFavor) {
+        saldo += m.monto;
+      } else if (m.tipo == TipoCartera.aplicacionSaldoFavor) {
+        saldo -= m.monto;
+      }
+    }
+    return saldo < 0 ? 0 : saldo;
+  }
+
+  /// §3.3.2 — Consume una parte del saldo a favor de un cliente al
+  /// aplicar un descuento en la liquidación de una venta pendiente.
+  /// NO mueve efectivo (el dinero ya ingresó como ENTRADA); únicamente
+  /// registra la aplicación en la cartera. Lanza
+  /// [SaldoInsuficienteException] si se excede el saldo disponible.
+  Future<MovimientoCartera> aplicarSaldoFavor({
+    required String clienteId,
+    required String nombreCliente,
+    required double monto,
+    required String operador,
+    String? concepto,
+  }) async {
+    final disponible = saldoFavorDisponible(clienteId);
+    if (monto <= 0) {
+      throw const ValorInvalidoException('El valor debe ser mayor a cero.');
+    }
+    if (monto > disponible) {
+      throw SaldoInsuficienteException(
+        saldoDisponible: disponible,
+        montoRequerido: monto,
+      );
+    }
+
+    final aplicacion = MovimientoCartera(
+      id: 'car-${_correlativoCartera++}',
+      clienteId: clienteId,
+      nombreCliente: nombreCliente,
+      tipo: TipoCartera.aplicacionSaldoFavor,
+      monto: monto,
+      concepto:
+          concepto ?? 'Descuento de saldo a favor en liquidación de venta',
+      fechaRegistro: DateTime.now(),
+      operador: operador,
+    );
+
+    state = state.copyWith(
+      movimientosCartera: [...state.movimientosCartera, aplicacion],
+    );
+    return aplicacion;
+  }
+
+  /// §3.3.2 — Reintegra saldo a favor a un cliente por anulación de una
+  /// liquidación que lo consumió. NO mueve efectivo (el crédito nunca
+  /// salió de la Caja); únicamente registra un nuevo ingreso tipo
+  /// `saldoFavor` en la cartera que restaura la disponibilidad.
+  Future<MovimientoCartera> reintegrarSaldoFavor({
+    required String clienteId,
+    required String nombreCliente,
+    required double monto,
+    required String operador,
+    String? concepto,
+  }) async {
+    if (monto <= 0) {
+      throw const ValorInvalidoException('El valor debe ser mayor a cero.');
+    }
+
+    final reintegro = MovimientoCartera(
+      id: 'car-${_correlativoCartera++}',
+      clienteId: clienteId,
+      nombreCliente: nombreCliente,
+      tipo: TipoCartera.saldoFavor,
+      monto: monto,
+      concepto:
+          concepto ?? 'Reintegro de saldo a favor por anulación de liquidación',
+      fechaRegistro: DateTime.now(),
+      operador: operador,
+    );
+
+    state = state.copyWith(
+      movimientosCartera: [...state.movimientosCartera, reintegro],
+    );
+    return reintegro;
   }
 
   /// §3.3.2 "Inmutabilidad del Pasado": editar un movimiento de
@@ -774,8 +1068,14 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
 
     final diferenciaMonto = nuevoMonto - original.monto;
 
+    // Una APLICACIÓN de saldo a favor no movió efectivo en la Caja
+    // (el dinero entró cuando se registró el ingreso), por lo que su
+    // edición solo replantea el crédito consumido sin generar ajuste
+    // de Caja. El resto de tipos sí ajustan la Caja.
+    final mueveEfectivo = original.tipo != TipoCartera.aplicacionSaldoFavor;
+
     // Ajuste contable en Caja por la diferencia.
-    if (diferenciaMonto != 0) {
+    if (mueveEfectivo && diferenciaMonto != 0) {
       final esEntrada = diferenciaMonto > 0;
       if (!esEntrada && diferenciaMonto.abs() > state.saldoActual) {
         throw SaldoInsuficienteException(
@@ -832,11 +1132,23 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
       throw const ValorInvalidoException('El movimiento ya fue anulado.');
     }
 
-    // Un PRÉSTAMO anulado devuelve dinero a Caja (entrada). Un ABONO
-    // anulado retira dinero de Caja (salida) — exige liquidez.
+    // Un PRÉSTAMO anulado devuelve dinero a Caja (entrada). Un ABONO o
+    // un INGRESO (saldo a favor) anulado retira dinero de Caja (salida)
+    // — exige liquidez. Una APLICACIÓN de saldo a favor no movió
+    // efectivo (el dinero ya entró antes), por lo que anularla solo la
+    // marca anulada y restaura el crédito en la cartera.
     final tipoReversion = original.tipo == TipoCartera.prestamo
         ? TipoMovimientoCaja.entrada
-        : TipoMovimientoCaja.salida;
+        : original.tipo == TipoCartera.aplicacionSaldoFavor
+            ? null
+            : TipoMovimientoCaja.salida;
+
+    final label = switch (original.tipo) {
+      TipoCartera.prestamo => 'préstamo',
+      TipoCartera.abono => 'abono',
+      TipoCartera.saldoFavor => 'ingreso',
+      TipoCartera.aplicacionSaldoFavor => 'aplicación de saldo a favor',
+    };
 
     if (tipoReversion == TipoMovimientoCaja.salida &&
         original.monto > state.saldoActual) {
@@ -846,16 +1158,16 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
       );
     }
 
-    await registrarMovimientoAutomatico(
-      tipo: tipoReversion,
-      monto: original.monto,
-      concepto:
-          'Reversión por anulación — cartera #$carteraId '
-          '(${original.tipo == TipoCartera.prestamo ? 'préstamo' : 'abono'})',
-      origenTabla: 'movimientos_caja',
-      origenId: _correlativoId - 1,
-      operador: operador,
-    );
+    if (tipoReversion != null) {
+      await registrarMovimientoAutomatico(
+        tipo: tipoReversion,
+        monto: original.monto,
+        concepto: 'Reversión por anulación — cartera #$carteraId ($label)',
+        origenTabla: 'movimientos_caja',
+        origenId: _correlativoId - 1,
+        operador: operador,
+      );
+    }
 
     final actualizados = state.movimientosCartera
         .map((m) => m.id == carteraId ? m.copyWith(anulado: true) : m)
@@ -874,13 +1186,23 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
     required MovimientoCartera movimiento,
     required EncabezadoComprobante encabezado,
   }) {
-    final esPrestamo = movimiento.tipo == TipoCartera.prestamo;
+    final titulo = _tituloMovimientoCartera(movimiento.tipo);
     final lineas = _lineasMovimientoCartera(movimiento);
     return ComprobanteServicio.instancia.compartirPdf(
       encabezado: encabezado,
-      titulo: esPrestamo ? 'Comprobante de Préstamo' : 'Comprobante de Abono',
+      titulo: titulo,
       lineas: lineas,
     );
+  }
+
+  String _tituloMovimientoCartera(TipoCartera tipo) {
+    return switch (tipo) {
+      TipoCartera.prestamo => 'Comprobante de Préstamo',
+      TipoCartera.abono => 'Comprobante de Abono',
+      TipoCartera.saldoFavor => 'Comprobante de Ingreso de Cliente',
+      TipoCartera.aplicacionSaldoFavor =>
+        'Comprobante de Saldo a Favor Aplicado',
+    };
   }
 
   /// §3.3.2: imprime el ticket térmico del movimiento de cartera
@@ -891,9 +1213,8 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
     required int copias,
     required bool cortarPapel,
   }) async {
-    final esPrestamo = movimiento.tipo == TipoCartera.prestamo;
     final datos = TicketEscPosBuilder.construir(
-      titulo: esPrestamo ? 'PRÉSTAMO' : 'ABONO',
+      titulo: _tituloMovimientoCartera(movimiento.tipo),
       lineas: [
         'Cliente: ${movimiento.nombreCliente}',
         'Concepto: ${movimiento.concepto}',
@@ -916,11 +1237,14 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
   List<LineaComprobante> _lineasMovimientoCartera(
     MovimientoCartera movimiento,
   ) {
-    final esPrestamo = movimiento.tipo == TipoCartera.prestamo;
+    final titulo = switch (movimiento.tipo) {
+      TipoCartera.prestamo => 'PRÉSTAMO A CLIENTE',
+      TipoCartera.abono => 'ABONO DE CARTERA',
+      TipoCartera.saldoFavor => 'INGRESO DE CLIENTE (SALDO A FAVOR)',
+      TipoCartera.aplicacionSaldoFavor => 'SALDO A FAVOR APLICADO',
+    };
     final lineas = <LineaComprobante>[
-      LineaComprobante.texto(
-        esPrestamo ? 'PRÉSTAMO A CLIENTE' : 'ABONO DE CARTERA',
-      ),
+      LineaComprobante.texto(titulo),
       LineaComprobante.campo('Cliente', movimiento.nombreCliente),
       LineaComprobante.campo('Concepto', movimiento.concepto),
       LineaComprobante.campo(
@@ -934,7 +1258,8 @@ class CajaNotifier extends StateNotifier<CajaEstado> {
       ),
       LineaComprobante.campo('Operador', movimiento.operador),
     ];
-    if (!esPrestamo && movimiento.distribucion != null) {
+    if (movimiento.tipo == TipoCartera.abono &&
+        movimiento.distribucion != null) {
       lineas.add(const LineaComprobante.separador());
       lineas.add(const LineaComprobante.texto(
         'Distribución del abono',

@@ -82,7 +82,7 @@ class ComprobanteServicio {
         build: (context) => [
           pw.Center(
             child: pw.Text(
-              encabezado.empresa.isEmpty ? 'COFFEE CONTROL' : encabezado.empresa,
+              encabezado.empresa,
               style: pw.TextStyle(
                 fontWeight: pw.FontWeight.bold,
                 fontSize: 14,
@@ -228,7 +228,7 @@ class TicketEscPosBuilder {
       buffer.add(const [0x1D, 0x21, 0x00]);
       linea('');
       linea(
-        encabezado.empresa.isEmpty ? 'COFFEE CONTROL' : encabezado.empresa,
+        encabezado.empresa,
       );
       if ((encabezado.nit ?? '').isNotEmpty) {
         linea('NIT: ${encabezado.nit}');

@@ -142,6 +142,11 @@ class BluetoothPrintPlus {
   /// The `connect` method returns immediately, and the connection status
   /// is reported on the `connectState` stream.
   static Future<dynamic> connect(BluetoothDevice device) async {
+    // Asegura la suscripción al canal de estado antes de conectar: si el
+    // evento `connected` se emitiera con el canal sin suscriptores nativos
+    // (primer arranque, actividad recreada), se perdería en silencio y la
+    // app quedaría "Desconectada" aunque el socket sí se abriera.
+    await _initFlutterBluePlus();
     await _methodChannel.invokeMethod('connect', device.toJson());
   }
 
@@ -153,7 +158,25 @@ class BluetoothPrintPlus {
   ///
   /// Returns a `Future` that completes when the disconnection process is finished.
   static Future<dynamic> disconnect() async {
+    await _initFlutterBluePlus();
     await _methodChannel.invokeMethod('disconnect');
+  }
+
+  /// Consulta la conexión VERDADERA del socket SPP en el lado nativo.
+  ///
+  /// [isConnected] depende de que el evento del canal haya llegado a Dart;
+  /// este método pregunta directamente si el puerto está abierto, así la
+  /// pantalla no muestra "Desconectada" cuando la impresora ya está
+  /// operativa (por ejemplo si el evento se emitió antes de suscribirse).
+  static Future<bool> estaConectadoReal() async {
+    await _initFlutterBluePlus();
+    try {
+      final ok =
+          await _methodChannel.invokeMethod<bool>('isPrinterConnected');
+      return ok == true;
+    } catch (_) {
+      return isConnected;
+    }
   }
 
   /// Lista los dispositivos Bluetooth ya vinculados (pareados) con el
@@ -229,6 +252,7 @@ class BluetoothPrintPlus {
   ///
   /// Returns a `Future` that completes when the write operation is finished.
   static Future<dynamic> write(Uint8List? data) async {
+    await _initFlutterBluePlus();
     await _methodChannel.invokeMethod('write', {"data": data});
   }
 

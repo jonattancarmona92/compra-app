@@ -8,7 +8,9 @@
 // repositorio interno por consultas SQLite reales sin cambiar la
 // interfaz pública del Notifier, gracias a la capa de servicio
 // abstracta definida abajo.
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/cliente_model.dart';
 
@@ -58,9 +60,86 @@ class ClienteNoEncontradoException implements Exception {
 class ClienteNotifier extends StateNotifier<ClienteEstado> {
   ClienteNotifier() : super(const ClienteEstado()) {
     _inicializar();
+    _restaurarPersistido();
   }
 
   int _correlativo = 100;
+
+  static const String _keyEstado = 'clientes_estado_json_v1';
+
+  /// Persiste el catálogo en disco tras cada mutación para sobrevivir a
+  /// reinicios del proceso.
+  @override
+  set state(ClienteEstado value) {
+    super.state = value;
+    _persistirEstado();
+  }
+
+  Future<void> _persistirEstado() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _keyEstado,
+        jsonEncode({
+          'correlativo': _correlativo,
+          'clientes': state.clientes.map(_clienteAJson).toList(),
+        }),
+      );
+    } catch (_) {
+      // Entorno sin storage (tests): se omite la persistencia.
+    }
+  }
+
+  Map<String, dynamic> _clienteAJson(ClienteModel c) => {
+        'id': c.id,
+        'nombreCompleto': c.nombreCompleto,
+        'documento': c.documento,
+        'telefono': c.telefono,
+        'direccion': c.direccion,
+        'creditoAutorizado': c.creditoAutorizado,
+        'cupoMaximo': c.cupoMaximo,
+        'activo': c.activo,
+        'saldoDeuda': c.saldoDeuda,
+        'saldoFavor': c.saldoFavor,
+        'tieneAnticipos': c.tieneAnticipos,
+      };
+
+  ClienteModel _clienteDesdeJson(Map<String, dynamic> j) => ClienteModel(
+        id: j['id'] as String,
+        nombreCompleto: j['nombreCompleto'] as String,
+        documento: j['documento'] as String,
+        telefono: j['telefono'] as String?,
+        direccion: j['direccion'] as String?,
+        creditoAutorizado: j['creditoAutorizado'] as bool? ?? false,
+        cupoMaximo: (j['cupoMaximo'] as num?)?.toDouble() ?? 0,
+        activo: j['activo'] as bool? ?? true,
+        saldoDeuda: (j['saldoDeuda'] as num?)?.toDouble() ?? 0,
+        saldoFavor: (j['saldoFavor'] as num?)?.toDouble() ?? 0,
+        tieneAnticipos: j['tieneAnticipos'] as bool? ?? false,
+      );
+
+  /// Restaura el catálogo guardado en disco. Si no hay datos o el
+  /// entorno no tiene storage, parte de un catálogo vacío.
+  Future<void> _restaurarPersistido() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final guardado = prefs.getString(_keyEstado);
+      if (guardado == null || guardado.isEmpty) {
+        _inicializar();
+        return;
+      }
+      final json = jsonDecode(guardado) as Map<String, dynamic>;
+      _correlativo = (json['correlativo'] as num?)?.toInt() ?? 100;
+      state = ClienteEstado(
+        isCargando: false,
+        clientes: (json['clientes'] as List? ?? const [])
+            .map((e) => _clienteDesdeJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+    } catch (_) {
+      _inicializar();
+    }
+  }
 
   void _inicializar() {
     state = state.copyWith(isCargando: false, clientes: const []);
@@ -139,12 +218,14 @@ class ClienteNotifier extends StateNotifier<ClienteEstado> {
   void actualizarSaldos({
     required String clienteId,
     double? saldoDeuda,
+    double? saldoFavor,
     bool? tieneAnticipos,
   }) {
     final actualizada = state.clientes.map((c) {
       if (c.id != clienteId) return c;
       return c.copyWith(
         saldoDeuda: saldoDeuda ?? c.saldoDeuda,
+        saldoFavor: saldoFavor ?? c.saldoFavor,
         tieneAnticipos: tieneAnticipos ?? c.tieneAnticipos,
       );
     }).toList();

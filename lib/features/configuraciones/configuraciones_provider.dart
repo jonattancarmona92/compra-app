@@ -29,14 +29,14 @@ class DatosFactura {
   final String mensajePie;
 
   const DatosFactura({
-    this.razonSocial = 'Cooperativa de Caficultores',
-    this.nit = '890.000.000-0',
-    this.direccion = 'Calle 1 # 2-3',
-    this.telefono = '000 000 0000',
-    this.ciudad = 'Ciudad',
+    this.razonSocial = '',
+    this.nit = '',
+    this.direccion = '',
+    this.telefono = '',
+    this.ciudad = '',
     this.resolucionDian = '',
     this.vigenciaResolucion = '',
-    this.mensajePie = 'Gracias por su compra',
+    this.mensajePie = '',
   });
 
   DatosFactura copyWith({
@@ -92,8 +92,8 @@ class ConfigImpresora {
     this.formato = FormatoImpresion.pos,
     this.enlinea = false,
     this.copias = 1,
-    this.cortarPapel = true,
-    this.imprimirLogo = true,
+    this.cortarPapel = false,
+    this.imprimirLogo = false,
   });
 
   ConfigImpresora copyWith({

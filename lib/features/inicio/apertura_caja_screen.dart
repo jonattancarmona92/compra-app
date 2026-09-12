@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/diseno.dart';
+import '../configuraciones/actualizacion_en_curso_provider.dart';
 import 'control_inicio_provider.dart';
 
 class AperturaCajaScreen extends ConsumerStatefulWidget {
@@ -56,6 +57,17 @@ class _AperturaCajaScreenState extends ConsumerState<AperturaCajaScreen> {
   Future<void> _abrirCaja() async {
     if (_guardando) return;
 
+    // Regla de negocio: no se abre la Caja durante una actualización en curso.
+    final actualizacion = ref.read(actualizacionEnCursoProvider);
+    if (actualizacion.enCurso) {
+      Notificaciones.error(
+        context,
+        'No se puede abrir la Caja mientras hay una actualización en proceso '
+        '(${_porcentajeEtiqueta(actualizacion)}).',
+      );
+      return;
+    }
+
     final texto = _saldoController.text.trim();
     final saldo = texto.isEmpty ? null : CurrencyFormatter.parseValue(texto);
 
@@ -95,10 +107,20 @@ class _AperturaCajaScreenState extends ConsumerState<AperturaCajaScreen> {
     }
   }
 
+  String _porcentajeEtiqueta(ActualizacionEnCurso actualizacion) {
+    final mensaje = actualizacion.mensaje.trim();
+    if (mensaje.isNotEmpty) return mensaje;
+    return '${actualizacion.progreso.round()}%';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final estado = ref.watch(controlInicioProvider);
+    final actualizacion = ref.watch(actualizacionEnCursoProvider);
+    final bloqueadaPorActualizacion = actualizacion.enCurso;
+    final habilitado =
+        !_guardando && estado.isPeriodoActivo && !bloqueadaPorActualizacion;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -140,6 +162,10 @@ class _AperturaCajaScreenState extends ConsumerState<AperturaCajaScreen> {
                   ),
                   const SizedBox(height: AppEspaciado.xl),
                   _buildEstadoPeriodo(theme, estado),
+                  if (bloqueadaPorActualizacion) ...[
+                    const SizedBox(height: AppEspaciado.m),
+                    _buildBloqueoActualizacion(theme, actualizacion),
+                  ],
                   const SizedBox(height: AppEspaciado.l),
                   if (!_esDiaCero) ...[
                     _buildBadgeSaldoPropuesto(theme),
@@ -147,7 +173,7 @@ class _AperturaCajaScreenState extends ConsumerState<AperturaCajaScreen> {
                   ],
                   TextField(
                     controller: _saldoController,
-                    enabled: !_guardando && estado.isPeriodoActivo,
+                    enabled: habilitado,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
@@ -167,9 +193,10 @@ class _AperturaCajaScreenState extends ConsumerState<AperturaCajaScreen> {
                   SizedBox(
                     height: 56,
                     child: ElevatedButton.icon(
-                      onPressed: _guardando || !estado.isPeriodoActivo
-                          ? null
-                          : _abrirCaja,
+onPressed: _guardando || !estado.isPeriodoActivo ||
+                            bloqueadaPorActualizacion
+                        ? null
+                        : _abrirCaja,
                       icon: _guardando
                           ? const SizedBox(
                               width: 20,
@@ -275,6 +302,60 @@ class _AperturaCajaScreenState extends ConsumerState<AperturaCajaScreen> {
                     ? theme.colorScheme.onSurface
                     : theme.colorScheme.onErrorContainer,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBloqueoActualizacion(
+    ThemeData theme,
+    ActualizacionEnCurso actualizacion,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(AppEspaciado.l),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(AppEspaciado.radioEstandar),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.system_update_alt,
+                color: theme.colorScheme.onErrorContainer,
+              ),
+              const SizedBox(width: AppEspaciado.m),
+              Expanded(
+                child: Text(
+                  'Actualización en proceso',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppEspaciado.m),
+          ClipRRect(
+            borderRadius:
+                BorderRadius.circular(AppEspaciado.radioEstandar),
+            child: LinearProgressIndicator(
+              value: (actualizacion.progreso / 100).clamp(0, 1),
+              minHeight: 8,
+            ),
+          ),
+          const SizedBox(height: AppEspaciado.s),
+          Text(
+            actualizacion.mensaje,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onErrorContainer,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

@@ -19,6 +19,7 @@ import '../../core/seguridad/licencia_pin.dart';
 import '../../core/widgets/pin_entry_widget.dart';
 import '../caja/caja_provider.dart';
 import '../inicio/control_inicio_provider.dart';
+import 'actualizacion_en_curso_provider.dart';
 import 'licencia_provider.dart';
 import 'update_service.dart';
 
@@ -351,6 +352,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
   }
 
   Future<void> _descargarEInstalar(InfoActualizacion info) async {
+    ref.read(actualizacionEnCursoProvider.notifier).iniciar();
     setState(() {
       _descargando = true;
       _progreso = 0;
@@ -359,9 +361,11 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
     _subDescarga = _servicio
         .descargarEInstalar(info.apkUrl)
         .listen(_onEventoOta, onError: (Object e) {
+      ref.read(actualizacionEnCursoProvider.notifier).finalizar();
       if (!mounted) return;
       setState(() {
         _descargando = false;
+        _progreso = 0;
         _mensajeDescarga = '';
       });
       Notificaciones.error(context, 'Error al descargar: $e');
@@ -377,9 +381,14 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
           _progreso = pct;
           _mensajeDescarga = 'Descargando… ${pct.round()}%';
         });
+        ref
+            .read(actualizacionEnCursoProvider.notifier)
+            .actualizarProgreso(pct, _mensajeDescarga);
       case OtaStatus.INSTALLING:
         setState(() => _mensajeDescarga = 'Instalando actualización…');
+        ref.read(actualizacionEnCursoProvider.notifier).instalando();
       case OtaStatus.INSTALLATION_DONE:
+        ref.read(actualizacionEnCursoProvider.notifier).finalizar();
         setState(() {
           _descargando = false;
           _mensajeDescarga = 'Instalación completada';
@@ -410,6 +419,7 @@ class _ActualizacionesScreenState extends ConsumerState<ActualizacionesScreen> {
   }
 
   void _abortarDescarga(String motivo) {
+    ref.read(actualizacionEnCursoProvider.notifier).finalizar();
     if (!mounted) return;
     setState(() {
       _descargando = false;

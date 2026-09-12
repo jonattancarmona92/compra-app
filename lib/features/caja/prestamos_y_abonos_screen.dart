@@ -72,6 +72,11 @@ class _PrestamosYAbonosScreenState
                         label: Text('Abono'),
                         icon: Icon(Icons.savings_outlined),
                       ),
+                      ButtonSegment(
+                        value: TipoCartera.saldoFavor,
+                        label: Text('Ingreso'),
+                        icon: Icon(Icons.attach_money),
+                      ),
                     ],
                     selected: {_tipoSeleccionado},
                     onSelectionChanged: (seleccion) => setState(
@@ -106,11 +111,22 @@ class _PrestamosYAbonosScreenState
   Widget _buildSeccionClientes(ThemeData theme) {
     final clientes = ref.watch(clienteProvider).clientes;
 
-    // §3.3.2: préstamo listo solo clientes con crédito autorizado;
-    // abono prioriza a deudores y clientes con anticipos.
-    final elegibles = _tipoSeleccionado == TipoCartera.prestamo
-        ? ref.read(clienteProvider.notifier).clientesParaPrestamo()
-        : ref.read(clienteProvider.notifier).clientesParaAbono();
+    // §3.3.2: préstamo solo clientes con crédito autorizado;
+    // abono prioriza a deudores y clientes con anticipos; el ingreso
+    // (saldo a favor) aplica a cualquier cliente activo.
+    final elegibles = switch (_tipoSeleccionado) {
+      TipoCartera.prestamo =>
+        ref.read(clienteProvider.notifier).clientesParaPrestamo(),
+      TipoCartera.abono =>
+        ref.read(clienteProvider.notifier).clientesParaAbono(),
+      TipoCartera.saldoFavor => ref
+          .read(clienteProvider)
+          .clientes
+          .where((c) => c.activo)
+          .toList(),
+      // La aplicación de saldo a favor es solo por liquidación (§3.3.2).
+      TipoCartera.aplicacionSaldoFavor => <ClienteModel>[],
+    };
 
     final normalizada = _busquedaCliente.trim().toLowerCase();
     final filtrados = normalizada.isEmpty
@@ -127,9 +143,12 @@ class _PrestamosYAbonosScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          _tipoSeleccionado == TipoCartera.prestamo
-              ? 'Cliente (crédito autorizado)'
-              : 'Cliente (deudor / con anticipos)',
+          switch (_tipoSeleccionado) {
+            TipoCartera.prestamo => 'Cliente (crédito autorizado)',
+            TipoCartera.abono => 'Cliente (deudor / con anticipos)',
+            TipoCartera.saldoFavor => 'Cliente (recibir saldo a favor)',
+            TipoCartera.aplicacionSaldoFavor => 'Cliente',
+          },
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -154,6 +173,9 @@ class _PrestamosYAbonosScreenState
             (c) => _ClienteCarteraCard(
               cliente: c,
               tipo: _tipoSeleccionado,
+              saldoFavorDisponible: ref
+                  .read(cajaProvider.notifier)
+                  .saldoFavorDisponible(c.id),
               onSeleccionar: () => _abrirFormulario(context, cliente: c),
             ),
           ),
@@ -188,9 +210,12 @@ class _PrestamosYAbonosScreenState
             ),
             const SizedBox(height: AppEspaciado.s),
             Text(
-              _tipoSeleccionado == TipoCartera.prestamo
-                  ? 'No hay clientes con crédito autorizado.'
-                  : 'No hay clientes con saldo pendiente.',
+              switch (_tipoSeleccionado) {
+                TipoCartera.prestamo => 'No hay clientes con crédito autorizado.',
+                TipoCartera.abono => 'No hay clientes con saldo pendiente.',
+                TipoCartera.saldoFavor => 'No hay clientes activos.',
+                TipoCartera.aplicacionSaldoFavor => 'No hay clientes.',
+              },
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -396,8 +421,12 @@ class _PrestamosYAbonosScreenState
     }
   }
 
-  String _tipoLabel(TipoCartera tipo) =>
-      tipo == TipoCartera.prestamo ? 'préstamo' : 'abono';
+String _tipoLabel(TipoCartera tipo) => switch (tipo) {
+      TipoCartera.prestamo => 'préstamo',
+      TipoCartera.abono => 'abono',
+      TipoCartera.saldoFavor => 'ingreso',
+      TipoCartera.aplicacionSaldoFavor => 'saldo a favor aplicado',
+    };
 
   // §1.2 — valida contra el PIN registrado en el primer inicio.
   Future<bool> _validarPin(BuildContext context, String pin) async =>
@@ -411,19 +440,22 @@ class _PrestamosYAbonosScreenState
 class _ClienteCarteraCard extends StatelessWidget {
   final ClienteModel cliente;
   final TipoCartera tipo;
+
+  /// Saldo a favor disponible del cliente (cargado fuera para evitar
+  /// dependencias circulares con la Caja).
+  final double saldoFavorDisponible;
   final VoidCallback onSeleccionar;
 
   const _ClienteCarteraCard({
     required this.cliente,
     required this.tipo,
+    required this.saldoFavorDisponible,
     required this.onSeleccionar,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    final esPrestamo = tipo == TipoCartera.prestamo;
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppEspaciado.s),
@@ -447,24 +479,40 @@ class _ClienteCarteraCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Doc: ${cliente.documento}'),
-            if (esPrestamo)
-              Text(
-                'Cupo disponible: '
-                '${CurrencyFormatter.formatValue(cliente.cupoDisponible)}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: cliente.cupoDisponible <= 0
-                      ? AppPaletaOficial.rojo
-                      : AppPaletaOficial.verde,
+            switch (tipo) {
+              TipoCartera.prestamo => Text(
+                  'Cupo disponible: '
+                  '${CurrencyFormatter.formatValue(cliente.cupoDisponible)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cliente.cupoDisponible <= 0
+                        ? AppPaletaOficial.rojo
+                        : AppPaletaOficial.verde,
+                  ),
                 ),
-              )
-            else
-              Text(
-                'Saldo pendiente: '
-                '${CurrencyFormatter.formatValue(cliente.saldoDeuda)}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppPaletaOficial.rojo,
+              TipoCartera.abono => Text(
+                  'Saldo pendiente: '
+                  '${CurrencyFormatter.formatValue(cliente.saldoDeuda)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppPaletaOficial.rojo,
+                  ),
                 ),
-              ),
+              TipoCartera.saldoFavor => Text(
+                  'Saldo a favor disponible: '
+                  '${CurrencyFormatter.formatValue(saldoFavorDisponible)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: saldoFavorDisponible > 0
+                        ? AppPaletaOficial.verde
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              TipoCartera.aplicacionSaldoFavor => Text(
+                  'Saldo deuda: '
+                  '${CurrencyFormatter.formatValue(cliente.saldoDeuda)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppPaletaOficial.rojo,
+                  ),
+                ),
+            },
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
@@ -496,21 +544,33 @@ class _MovimientoCarteraTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final esPrestamo = movimiento.tipo == TipoCartera.prestamo;
-    final color = esPrestamo ? AppPaletaOficial.rojo : AppPaletaOficial.verde;
-    final signo = esPrestamo ? '-' : '+';
+    final esEntrada = switch (movimiento.tipo) {
+      TipoCartera.abono => true,
+      TipoCartera.saldoFavor => true,
+      TipoCartera.prestamo => false,
+      TipoCartera.aplicacionSaldoFavor => false,
+    };
+    final color =
+        esEntrada ? AppPaletaOficial.verde : AppPaletaOficial.rojo;
+    final signo = esEntrada ? '+' : '-';
+    final etiqueta = switch (movimiento.tipo) {
+      TipoCartera.prestamo => 'Préstamo',
+      TipoCartera.abono => 'Abono',
+      TipoCartera.saldoFavor => 'Ingreso (saldo a favor)',
+      TipoCartera.aplicacionSaldoFavor => 'Saldo a favor aplicado',
+    };
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppEspaciado.s),
       child: ListTile(
         leading: Icon(
-          esPrestamo
-              ? Icons.arrow_upward
-              : Icons.arrow_downward,
+          esEntrada
+              ? Icons.arrow_downward
+              : Icons.arrow_upward,
           color: color,
         ),
         title: Text(
-          '${movimiento.nombreCliente} — ${esPrestamo ? 'Préstamo' : 'Abono'}',
+          '${movimiento.nombreCliente} — $etiqueta',
           style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -586,6 +646,29 @@ class _CarteraFormSheetState extends ConsumerState<_CarteraFormSheet> {
 
   bool get _esEdicion => widget.movimientoAEditar != null;
   bool get _esAbono => widget.tipo == TipoCartera.abono;
+  bool get _esIngreso => widget.tipo == TipoCartera.saldoFavor;
+
+  String get _tituloFormulario {
+    if (_esEdicion) return 'Editar movimiento';
+    return switch (widget.tipo) {
+      TipoCartera.prestamo => 'Registrar préstamo',
+      TipoCartera.abono => 'Registrar abono',
+      TipoCartera.saldoFavor => 'Registrar ingreso (saldo a favor)',
+      TipoCartera.aplicacionSaldoFavor => 'Aplicación de saldo a favor',
+      null => 'Registrar movimiento',
+    };
+  }
+
+  String get _tituloBoton {
+    if (_esEdicion) return 'Guardar cambios';
+    return switch (widget.tipo) {
+      TipoCartera.prestamo => 'Registrar préstamo',
+      TipoCartera.abono => 'Registrar abono',
+      TipoCartera.saldoFavor => 'Registrar ingreso',
+      TipoCartera.aplicacionSaldoFavor => 'Aplicar saldo a favor',
+      null => 'Guardar',
+    };
+  }
 
   @override
   void initState() {
@@ -593,13 +676,13 @@ class _CarteraFormSheetState extends ConsumerState<_CarteraFormSheet> {
     if (_esEdicion) {
       final m = widget.movimientoAEditar!;
       _montoController.text = m.monto.toStringAsFixed(0);
-      _conceptoController.text = _esAbono
-          ? 'Abono a cartera'
+      _conceptoController.text = (_esAbono || _esIngreso)
+          ? (_esAbono ? 'Abono a cartera' : 'Saldo a favor de cliente')
           : m.concepto;
     } else {
       _conceptoController.text = _esAbono
           ? 'Abono a cartera'
-          : '';
+          : (_esIngreso ? 'Saldo a favor de cliente' : '');
     }
   }
 
@@ -685,6 +768,16 @@ class _CarteraFormSheetState extends ConsumerState<_CarteraFormSheet> {
                 distribucion: distribucion,
                 operador: widget.operador,
               );
+        } else if (_esIngreso) {
+          await ref
+              .read(cajaProvider.notifier)
+              .registrarIngresoCliente(
+                clienteId: cliente!.id,
+                nombreCliente: cliente.nombreCompleto,
+                monto: monto,
+                concepto: _conceptoController.text.trim(),
+                operador: widget.operador,
+              );
         } else {
           await ref
               .read(cajaProvider.notifier)
@@ -705,9 +798,15 @@ class _CarteraFormSheetState extends ConsumerState<_CarteraFormSheet> {
           context,
           _esEdicion
               ? 'Movimiento actualizado.'
-              : (_esAbono
-                  ? 'Abono registrado y distribuido.'
-                  : 'Préstamo registrado.'),
+              : (switch (widget.tipo) {
+                  TipoCartera.prestamo => 'Préstamo registrado.',
+                  TipoCartera.abono => 'Abono registrado y distribuido.',
+                  TipoCartera.saldoFavor =>
+                    'Ingreso registrado como saldo a favor.',
+                  TipoCartera.aplicacionSaldoFavor =>
+                    'Saldo a favor aplicado.',
+                  null => 'Movimiento registrado.',
+                }),
         );
       }
     } on CupoInsuficienteException catch (e) {
@@ -760,9 +859,7 @@ class _CarteraFormSheetState extends ConsumerState<_CarteraFormSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                _esEdicion
-                    ? 'Editar movimiento'
-                    : (_esAbono ? 'Registrar abono' : 'Registrar préstamo'),
+                _tituloFormulario,
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontSize: AppEscalaTipografica.subtitulo + 2,
                 ),
@@ -786,7 +883,7 @@ class _CarteraFormSheetState extends ConsumerState<_CarteraFormSheet> {
                 validator: CurrencyFormatter.validar,
               ),
               const SizedBox(height: AppEspaciado.m),
-              if (!_esAbono)
+              if (!_esAbono && !_esIngreso)
                 TextFormField(
                   controller: _conceptoController,
                   enabled: !_guardando,
@@ -798,6 +895,33 @@ class _CarteraFormSheetState extends ConsumerState<_CarteraFormSheet> {
                       (value == null || value.trim().isEmpty)
                           ? 'Campo obligatorio'
                           : null,
+                ),
+              if (_esIngreso)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _conceptoController,
+                      enabled: !_guardando,
+                      decoration: const InputDecoration(
+                        labelText: 'Motivo del ingreso',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) =>
+                          (value == null || value.trim().isEmpty)
+                              ? 'Campo obligatorio'
+                              : null,
+                    ),
+                    const SizedBox(height: AppEspaciado.s),
+                    Text(
+                      'Este ingreso genera un saldo a favor del cliente que '
+                      'se descontará automáticamente al liquidar sus ventas '
+                      'pendientes (§3.3.2).',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               const SizedBox(height: AppEspaciado.l),
               SizedBox(
@@ -811,9 +935,7 @@ class _CarteraFormSheetState extends ConsumerState<_CarteraFormSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : Text(
-                          _esEdicion
-                              ? 'Guardar cambios'
-                              : (_esAbono ? 'Registrar abono' : 'Registrar préstamo'),
+                          _tituloBoton,
                         ),
                 ),
               ),

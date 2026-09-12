@@ -78,6 +78,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   late Future<PriceData?> _priceFuture;
   late Future<List<PrecioHistorico>> _historyFuture;
 
+  final UpdateService _updateService = UpdateService();
+  bool _chequeoDiarioDisparado = false;
+
   String? _currentMenu;
   final String _appTitle = 'Coffee Control';
 
@@ -100,6 +103,57 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       _priceFuture = _priceService.getPrice();
       _historyFuture = _priceService.obtenerHistorial();
     });
+  }
+
+  // ==========================================================================
+  // CHEQUEO AUTOMÁTICO DIARIO DE ACTUALIZACIONES (§3.8)
+  // ==========================================================================
+
+  /// Verifica UNA VEZ por día si hay una versión más reciente publicada.
+  /// Si existe, muestra un aviso con acceso directo a Actualizaciones.
+  /// Los errores de red (sin internet) se ignoran silenciosamente.
+  Future<void> _verificarActualizacionDiaria() async {
+    final InfoActualizacion? info;
+    try {
+      info = await _updateService.verificarUnaVezAlDia();
+    } catch (_) {
+      return;
+    }
+    if (!mounted || info == null) return;
+
+    final etiqueta = info.versionNombre.trim().isEmpty
+        ? 'la nueva versión'
+        : 'la versión ${info.versionNombre.trim()}';
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.system_update_alt, color: AppPaletaOficial.cafe),
+        title: const Text('Nueva actualización disponible'),
+        content: Text(
+          'Hay $etiqueta publicada. Puede descargarla e instalarla desde '
+          'Configuración > Actualizaciones.\n\n'
+          'Requisitos: caja cerrada, ID del dispositivo y respaldo '
+          'automático.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Más tarde'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _openScreen(
+                () => ActualizacionesScreen(onBack: _closeCurrentScreen),
+              );
+            },
+            child: const Text('Ir a Actualizaciones'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ==========================================================================
@@ -317,6 +371,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       estadoCaja.isCajaAbierta,
       estadoLicencia.esVencida,
     );
+
+    // Chequeo automático diario de actualizaciones: se dispara una sola
+    // vez cuando la Caja queda abierta (el overlay de inicio desaparece)
+    // y no se haya intentado hoy (regla "verificar una vez cada día").
+    if (inicioOverlay == null && !_chequeoDiarioDisparado) {
+      _chequeoDiarioDisparado = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _verificarActualizacionDiaria();
+      });
+    }
 
     // Si POS se desactiva mientras se está dentro de su submenú, se
     // vuelve al menú principal (§3.6: sin POS visible en ninguna

@@ -118,11 +118,17 @@ class _LiquidacionesScreenState extends ConsumerState<LiquidacionesScreen> {
     if (!mounted) return;
     _precioController.clear();
     setState(() => _transaccionEnProceso = null);
+    final registro = _registroDe(transaccion.id);
     _mostrarExitoOperacion(
       titulo: transaccion.esCompra
           ? 'Liquidación de Compra'
           : 'Liquidación de Venta',
-      lineas: _lineasLiquidacion(transaccion, precioFinal, saldoNeto),
+      lineas: _lineasLiquidacion(
+        transaccion,
+        precioFinal,
+        saldoNeto,
+        saldoFavorAplicado: registro?.saldoFavorAplicado ?? 0,
+      ),
     );
   }
 
@@ -323,12 +329,16 @@ class _LiquidacionesScreenState extends ConsumerState<LiquidacionesScreen> {
   List<LineaComprobante> _lineasLiquidacion(
     TransaccionCafe t,
     double precioFinal,
-    double saldoNeto,
-  ) {
+    double saldoNeto, {
+    double saldoFavorAplicado = 0,
+  }) {
     // §3.4.4 — el anticipo se resta (o suma si hay devolución) sobre el
     // valor total de la liquidación; el recibo lo hace explícito.
+    // §3.3.2 — si se aplicó saldo a favor del cliente, ese tramo se
+    // muestra aparte y el efectivo final llega reducido.
     final valorTotal = t.pesoNeto * (precioFinal / 125);
     final esCompra = t.esCompra;
+    final efectivoFinal = saldoNeto - saldoFavorAplicado;
     final etiquetaFinal = saldoNeto >= 0
         ? (esCompra ? 'Valor cancelado' : 'Valor recibido')
         : 'Devolución';
@@ -356,11 +366,23 @@ class _LiquidacionesScreenState extends ConsumerState<LiquidacionesScreen> {
         CurrencyFormatter.formatValue(t.anticipo),
         enNegrita: true,
       ),
-      LineaComprobante.campo(
-        etiquetaFinal,
-        CurrencyFormatter.formatValue(saldoNeto.abs()),
-        enNegrita: true,
-      ),
+      if (saldoFavorAplicado > 0) ...[
+        const LineaComprobante.separador(),
+        LineaComprobante.campo(
+          'Saldo a favor aplicado',
+          CurrencyFormatter.formatValue(saldoFavorAplicado),
+        ),
+        LineaComprobante.campo(
+          'Efectivo recibido',
+          CurrencyFormatter.formatValue(efectivoFinal),
+          enNegrita: true,
+        ),
+      ] else
+        LineaComprobante.campo(
+          etiquetaFinal,
+          CurrencyFormatter.formatValue(saldoNeto.abs()),
+          enNegrita: true,
+        ),
     ];
   }
 
@@ -380,6 +402,7 @@ class _LiquidacionesScreenState extends ConsumerState<LiquidacionesScreen> {
     LiquidacionRegistro? reg,
   ) {
     final montoEnCaja = reg?.saldoNetoPagado ?? t.valorTotal;
+    final saldoFavorAplicado = reg?.saldoFavorAplicado ?? 0;
     return [
       const LineaComprobante.texto('RECIBO DE TRANSACCIÓN SALDADA'),
       LineaComprobante.campo('Cliente', t.nombreCliente),
@@ -397,6 +420,11 @@ class _LiquidacionesScreenState extends ConsumerState<LiquidacionesScreen> {
         'Anticipos previos',
         CurrencyFormatter.formatValue(t.anticipo),
       ),
+      if (saldoFavorAplicado > 0)
+        LineaComprobante.campo(
+          'Saldo a favor aplicado',
+          CurrencyFormatter.formatValue(saldoFavorAplicado),
+        ),
       LineaComprobante.campo(
         montoEnCaja >= 0
             ? (t.esCompra ? 'Valor cancelado' : 'Valor recibido')

@@ -8,7 +8,9 @@
 // memoria que reproduce los campos de las tablas de Procesos. En el
 // Módulo 5 (Drift) se reemplaza por consultas reales sin cambiar la
 // interfaz pública del Notifier.
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../caja/caja_provider.dart';
 
@@ -218,6 +220,10 @@ class LiquidacionRegistro {
   /// Efectivo final entregado o recibido en Caja (monto total - anticipos).
   final double saldoNetoPagado;
 
+  /// Parte del pago de una venta cubierta con el saldo a favor (crédito
+  /// del cliente). No mueve efectivo: el dinero ya ingresó como ENTRADA.
+  final double saldoFavorAplicado;
+
   final EstadoLiquidacionRegistro estado;
   final DateTime fechaLiquidacion;
   final String? motivoAnulacion;
@@ -233,6 +239,7 @@ class LiquidacionRegistro {
     required this.montoTotalTransaccion,
     required this.montoAnticiposPrevios,
     required this.saldoNetoPagado,
+    this.saldoFavorAplicado = 0,
     required this.estado,
     required this.fechaLiquidacion,
     this.motivoAnulacion,
@@ -556,7 +563,7 @@ class ProcesosEstado {
 
 class ProcesosNotifier extends StateNotifier<ProcesosEstado> {
   ProcesosNotifier(this._ref) : super(const ProcesosEstado()) {
-    _cargarSimulado();
+    _restaurarPersistido();
   }
 
   final Ref _ref;
@@ -564,9 +571,188 @@ class ProcesosNotifier extends StateNotifier<ProcesosEstado> {
   int _correlativo = 1;
   int _correlativoLiquidacion = 1;
 
+  static const String _keyEstado = 'procesos_estado_json_v1';
+
   // NOTA DE INTEGRACIÓN PENDIENTE: el operador autenticado debe venir
   // de control_inicio_provider.dart. Por ahora se usa un valor fijo.
   static const String _operadorActual = 'operador_demo';
+
+  /// Persiste el estado completo (transacciones, liquidaciones, lotes)
+  /// en disco tras cada mutación para que sobreviva al reinicio.
+  @override
+  set state(ProcesosEstado value) {
+    super.state = value;
+    _persistirEstado();
+  }
+
+  Future<void> _persistirEstado() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyEstado, jsonEncode(_estadoAJson()));
+    } catch (_) {
+      // Entorno sin storage (tests): se omite la persistencia.
+    }
+  }
+
+  Map<String, dynamic> _estadoAJson() {
+    return {
+      'correlativo': _correlativo,
+      'correlativoLiquidacion': _correlativoLiquidacion,
+      'transacciones': state.transacciones.map(_transaccionAJson).toList(),
+      'liquidaciones': state.liquidaciones.map(_liquidacionAJson).toList(),
+      'lotes': state.lotes.map(_loteAJson).toList(),
+    };
+  }
+
+  Map<String, dynamic> _transaccionAJson(TransaccionCafe t) => {
+        'id': t.id,
+        'clienteId': t.clienteId,
+        'nombreCliente': t.nombreCliente,
+        'esCompra': t.esCompra,
+        'tipoCafe': t.tipoCafe.name,
+        'pesoBruto': t.pesoBruto,
+        'descuentoHumedadKg': t.descuentoHumedadKg,
+        'pesoNeto': t.pesoNeto,
+        'gramera': t.gramera,
+        'descuentoEmpaqueKg': t.descuentoEmpaqueKg,
+        'precioCarga': t.precioCarga,
+        'factorRendimiento': t.factorRendimiento,
+        'porcentajeAjuste': t.porcentajeAjuste,
+        'precioFinalCarga': t.precioFinalCarga,
+        'precioKg': t.precioKg,
+        'valorTotal': t.valorTotal,
+        'estadoPago': t.estadoPago.name,
+        'anticipo': t.anticipo,
+        'anulado': t.anulado,
+        'fechaRegistro': t.fechaRegistro.toIso8601String(),
+        'operador': t.operador,
+        'loteBodegaId': t.loteBodegaId,
+      };
+
+  TransaccionCafe _transaccionDesdeJson(Map<String, dynamic> j) {
+    return TransaccionCafe(
+      id: (j['id'] as num).toInt(),
+      clienteId: j['clienteId'] as String,
+      nombreCliente: j['nombreCliente'] as String,
+      esCompra: j['esCompra'] as bool,
+      tipoCafe: TipoCafeProceso.values.byName(j['tipoCafe'] as String),
+      pesoBruto: (j['pesoBruto'] as num).toDouble(),
+      descuentoHumedadKg: (j['descuentoHumedadKg'] as num?)?.toDouble() ?? 0,
+      pesoNeto: (j['pesoNeto'] as num).toDouble(),
+      gramera: (j['gramera'] as num?)?.toDouble() ?? 0,
+      descuentoEmpaqueKg: (j['descuentoEmpaqueKg'] as num?)?.toDouble() ?? 0,
+      precioCarga: (j['precioCarga'] as num).toDouble(),
+      factorRendimiento: (j['factorRendimiento'] as num).toDouble(),
+      porcentajeAjuste: (j['porcentajeAjuste'] as num).toDouble(),
+      precioFinalCarga: (j['precioFinalCarga'] as num).toDouble(),
+      precioKg: (j['precioKg'] as num).toDouble(),
+      valorTotal: (j['valorTotal'] as num).toDouble(),
+      estadoPago: EstadoPagoProceso.values.byName(j['estadoPago'] as String),
+      anticipo: (j['anticipo'] as num).toDouble(),
+      anulado: j['anulado'] as bool? ?? false,
+      fechaRegistro: DateTime.parse(j['fechaRegistro'] as String),
+      operador: j['operador'] as String,
+      loteBodegaId: (j['loteBodegaId'] as num?)?.toInt(),
+    );
+  }
+
+  Map<String, dynamic> _liquidacionAJson(LiquidacionRegistro l) => {
+        'id': l.id,
+        'transaccionId': l.transaccionId,
+        'clienteId': l.clienteId,
+        'nombreCliente': l.nombreCliente,
+        'esCompra': l.esCompra,
+        'tipoCafe': l.tipoCafe.name,
+        'pesoNeto': l.pesoNeto,
+        'montoTotalTransaccion': l.montoTotalTransaccion,
+        'montoAnticiposPrevios': l.montoAnticiposPrevios,
+        'saldoNetoPagado': l.saldoNetoPagado,
+        'saldoFavorAplicado': l.saldoFavorAplicado,
+        'estado': l.estado.name,
+        'fechaLiquidacion': l.fechaLiquidacion.toIso8601String(),
+        'motivoAnulacion': l.motivoAnulacion,
+      };
+
+  LiquidacionRegistro _liquidacionDesdeJson(Map<String, dynamic> j) {
+    return LiquidacionRegistro(
+      id: (j['id'] as num).toInt(),
+      transaccionId: (j['transaccionId'] as num).toInt(),
+      clienteId: j['clienteId'] as String,
+      nombreCliente: j['nombreCliente'] as String,
+      esCompra: j['esCompra'] as bool,
+      tipoCafe: TipoCafeProceso.values.byName(j['tipoCafe'] as String),
+      pesoNeto: (j['pesoNeto'] as num).toDouble(),
+      montoTotalTransaccion: (j['montoTotalTransaccion'] as num).toDouble(),
+      montoAnticiposPrevios: (j['montoAnticiposPrevios'] as num).toDouble(),
+      saldoNetoPagado: (j['saldoNetoPagado'] as num).toDouble(),
+      saldoFavorAplicado: (j['saldoFavorAplicado'] as num?)?.toDouble() ?? 0,
+      estado: EstadoLiquidacionRegistro.values.byName(j['estado'] as String),
+      fechaLiquidacion: DateTime.parse(j['fechaLiquidacion'] as String),
+      motivoAnulacion: j['motivoAnulacion'] as String?,
+    );
+  }
+
+  Map<String, dynamic> _loteAJson(LoteBodega l) => {
+        'id': l.id,
+        'transaccionId': l.transaccionId,
+        'clienteId': l.clienteId,
+        'nombreCliente': l.nombreCliente,
+        'tipoCafe': l.tipoCafe.name,
+        'pesoNeto': l.pesoNeto,
+        'estado': l.estado.name,
+        'fechaIngreso': l.fechaIngreso.toIso8601String(),
+        'precioEstimadoInicial': l.precioEstimadoInicial,
+        'costoKg': l.costoKg,
+        'codigoLote': l.codigoLote,
+      };
+
+  LoteBodega _loteDesdeJson(Map<String, dynamic> j) {
+    return LoteBodega(
+      id: (j['id'] as num).toInt(),
+      transaccionId: (j['transaccionId'] as num).toInt(),
+      clienteId: j['clienteId'] as String,
+      nombreCliente: j['nombreCliente'] as String,
+      tipoCafe: TipoCafeProceso.values.byName(j['tipoCafe'] as String),
+      pesoNeto: (j['pesoNeto'] as num).toDouble(),
+      estado: EstadoBodega.values.byName(j['estado'] as String),
+      fechaIngreso: DateTime.parse(j['fechaIngreso'] as String),
+      precioEstimadoInicial:
+          (j['precioEstimadoInicial'] as num?)?.toDouble() ?? 0,
+      costoKg: (j['costoKg'] as num?)?.toDouble() ?? 0,
+      codigoLote: j['codigoLote'] as String?,
+    );
+  }
+
+  /// Restaura el estado guardado en disco al iniciar. Si no hay datos o
+  /// el entorno no tiene storage, cae al estado simulado/vacío.
+  Future<void> _restaurarPersistido() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final guardado = prefs.getString(_keyEstado);
+      if (guardado == null || guardado.isEmpty) {
+        _cargarSimulado();
+        return;
+      }
+      final json = jsonDecode(guardado) as Map<String, dynamic>;
+      _correlativo = (json['correlativo'] as num?)?.toInt() ?? 1;
+      _correlativoLiquidacion =
+          (json['correlativoLiquidacion'] as num?)?.toInt() ?? 1;
+      state = ProcesosEstado(
+        isCargando: false,
+        transacciones: (json['transacciones'] as List? ?? const [])
+            .map((e) => _transaccionDesdeJson(e as Map<String, dynamic>))
+            .toList(),
+        liquidaciones: (json['liquidaciones'] as List? ?? const [])
+            .map((e) => _liquidacionDesdeJson(e as Map<String, dynamic>))
+            .toList(),
+        lotes: (json['lotes'] as List? ?? const [])
+            .map((e) => _loteDesdeJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+    } catch (_) {
+      _cargarSimulado();
+    }
+  }
 
   /// §3.9.1 — canal abstracto hacia el Módulo de Caja (§6.4.1: Procesos
   /// depende de Caja para inyectar egresos/ingresos de contado,
@@ -1127,6 +1313,34 @@ class ProcesosNotifier extends StateNotifier<ProcesosEstado> {
     final nuevoValor = original.pesoNeto * nuevoPrecioKg;
     final saldoNeto = nuevoValor - original.anticipo;
 
+    /// Saldo a favor (crédito del cliente) aplicado a la liquidación.
+    /// Solo aplica a VENTAS pendientes (§3.3.2): el dinero ya ingresó a
+    /// la Caja cuando se registró el ingreso, por lo que NO se mueve
+    /// efectivo nuevo; solo se consume el crédito.
+    var saldoFavorAplicado = 0.0;
+    var efectivoMovido = saldoNeto;
+
+    if (!original.esCompra && saldoNeto > 0) {
+      final disponible = _ref
+          .read(cajaProvider.notifier)
+          .saldoFavorDisponible(original.clienteId);
+      if (disponible > 0) {
+        saldoFavorAplicado = disponible >= saldoNeto ? saldoNeto : disponible;
+        if (saldoFavorAplicado > 0) {
+          await _ref.read(cajaProvider.notifier).aplicarSaldoFavor(
+                clienteId: original.clienteId,
+                nombreCliente: original.nombreCliente,
+                monto: saldoFavorAplicado,
+                operador: _operadorActual,
+                concepto:
+                    'Saldo a favor aplicado a liquidación de venta #'
+                    '$transaccionId',
+              );
+          efectivoMovido = saldoNeto - saldoFavorAplicado;
+        }
+      }
+    }
+
     // §3.9.1 — tratamiento asimétrico compra/venta.
     if (original.esCompra) {
       if (saldoNeto > 0) {
@@ -1149,10 +1363,10 @@ class ProcesosNotifier extends StateNotifier<ProcesosEstado> {
         );
       }
     } else {
-      if (saldoNeto > 0) {
+      if (efectivoMovido > 0) {
         await _registrarEnCaja(
           tipo: TipoMovimientoCaja.entrada,
-          monto: saldoNeto,
+          monto: efectivoMovido,
           concepto:
               'Cobro de venta de café a ${original.nombreCliente} — saldo neto',
           origenId: transaccionId,
@@ -1207,7 +1421,8 @@ class ProcesosNotifier extends StateNotifier<ProcesosEstado> {
       pesoNeto: original.pesoNeto,
       montoTotalTransaccion: nuevoValor,
       montoAnticiposPrevios: original.anticipo,
-      saldoNetoPagado: saldoNeto,
+      saldoNetoPagado: efectivoMovido,
+      saldoFavorAplicado: saldoFavorAplicado,
       estado: EstadoLiquidacionRegistro.validada,
       fechaLiquidacion: DateTime.now(),
     );
@@ -1367,6 +1582,22 @@ class ProcesosNotifier extends StateNotifier<ProcesosEstado> {
             'a ${liq.nombreCliente} — reversión de saldo',
         origenId: liq.transaccionId,
       );
+    }
+
+    // §3.3.2 — Restaurar saldo a favor si la liquidación anulada usó
+    // crédito. Se registra un nuevo movimiento tipo `saldoFavor` que
+    // reintegra el crédito consumido en la cartera del cliente, sin
+    // mover efectivo (el dinero ya se revirtió más arriba).
+    if (liq.saldoFavorAplicado > 0) {
+      await _ref.read(cajaProvider.notifier).reintegrarSaldoFavor(
+            clienteId: liq.clienteId,
+            nombreCliente: liq.nombreCliente,
+            monto: liq.saldoFavorAplicado,
+            concepto:
+                'Reintegro de saldo a favor por anulación de liquidación '
+                '#${liq.id}',
+            operador: _operadorActual,
+          );
     }
 
     // La transacción original regresa a 'PENDIENTE' (§3.4.4).
